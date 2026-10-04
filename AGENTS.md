@@ -18,10 +18,18 @@ Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
     fails the client poll).
   - `sensor.py`, `binary_sensor.py`, `select.py`.
   - `tenda-mw6-card.js`: Lovelace card (English labels, hardcoded).
+  - `tenda-mw6-topology-card.js`: topology card (one column per node). Pure model
+    (`mw6tBuildTopology`, `mw6tSignalLevel`, ...) exported via `module.exports` for
+    Node tests; labels EN/FR/PL from `hass.language`. Both card files are served by
+    `__init__.py` (`FRONTEND_FILES`).
+  - Node devices: `api.summarize_nodes()` → `coordinator.node_summaries` →
+    `sensor.py` `TendaMW6Node*Sensor` (device id `(DOMAIN, f"{entry_id}:node:{sn}")`,
+    `via_device` = hub). Derived from the client list only.
   - `translations/`: `en.json`, `fr.json`, `pl.json`; `strings.json` = English
     source. Entity names and sort-option labels are localized here
     (`entity.select.*`).
-- `tests/test_api.py` (Python unittest), `tests/test_card.js` (Node).
+- `tests/test_api.py` (Python unittest), `tests/test_card.js` and
+  `tests/test_topology_card.js` (Node).
 
 ## Commands
 
@@ -29,6 +37,7 @@ Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
 python3 -m unittest tests.test_api                     # API tests
 python3 -m doctest custom_components/tenda_mw6/api.py  # doctests
 node tests/test_card.js                                # card logic
+node tests/test_topology_card.js                       # topology card
 node -c custom_components/tenda_mw6/tenda-mw6-card.js  # JS syntax check
 ```
 
@@ -51,6 +60,11 @@ node -c custom_components/tenda_mw6/tenda-mw6-card.js  # JS syntax check
   `month`, `MB`, `GB`): **do not translate** (logic / localStorage keys); only
   visible labels are text.
 - Read-only only: never send a write/bind/set command to the router.
+- Topology card: every top-level identifier is prefixed `mw6t` / `MW6T_` (both
+  cards are classic scripts on the same page; a duplicated top-level `const`
+  would throw). Node sensors carry `tenda_mw6_node: true`, `tenda_mw6_metric`
+  (`node_online` / `node_wifi` / `node_weakest_signal`), `node_sn`,
+  `config_entry_id`: the card discovers nodes through these, not entity ids.
 
 ## Protocol reference
 

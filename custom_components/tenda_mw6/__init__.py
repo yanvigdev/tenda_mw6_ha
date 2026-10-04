@@ -26,28 +26,43 @@ PLATFORMS: tuple[Platform, ...] = (
 # (qrmsg field of the LoginMsg). Replaces the former 32-hex "account".
 CONF_SERIAL = "serial"
 CONF_DEVICE_ALIASES = "device_aliases"
-FRONTEND_URL = f"/{DOMAIN}/tenda-mw6-card.js"
-FRONTEND_PATH = Path(__file__).with_name("tenda-mw6-card.js")
+# Lovelace cards bundled with the integration, served from this package directory
+# under /tenda_mw6/<file name>.
+FRONTEND_FILES: tuple[str, ...] = (
+    "tenda-mw6-card.js",
+    "tenda-mw6-topology-card.js",
+)
 
 _MAC_RE = re.compile(r"^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$", re.IGNORECASE)
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
-    """Serve and load the bundled Lovelace card exactly once."""
+    """Serve and load the bundled Lovelace cards exactly once.
+
+    Each file is exposed as a static path and announced with add_extra_js_url. On some
+    installations this is not enough to load a card; a Lovelace resource must then be
+    declared by the user (see README).
+    """
     domain_data = hass.data.setdefault(DOMAIN, {})
     if domain_data.get("frontend_registered"):
         return
 
+    paths = [
+        (f"/{DOMAIN}/{file_name}", str(Path(__file__).with_name(file_name)))
+        for file_name in FRONTEND_FILES
+    ]
     if StaticPathConfig is not None and hasattr(
         hass.http, "async_register_static_paths"
     ):
         await hass.http.async_register_static_paths(
-            [StaticPathConfig(FRONTEND_URL, str(FRONTEND_PATH), False)]
+            [StaticPathConfig(url, path, False) for url, path in paths]
         )
     else:
-        hass.http.register_static_path(FRONTEND_URL, str(FRONTEND_PATH), False)
+        for url, path in paths:
+            hass.http.register_static_path(url, path, False)
 
-    add_extra_js_url(hass, FRONTEND_URL)
+    for url, _ in paths:
+        add_extra_js_url(hass, url)
     domain_data["frontend_registered"] = True
 
 

@@ -82,6 +82,36 @@ puis recharge le frontend (Ctrl+Maj+R). Ajoute ensuite la carte via
 type: custom:tenda-mw6-card
 ```
 
+## La carte topologie
+
+Chaque borne du mesh est exposée comme un appareil Home Assistant (« Tenda MW6 node
+…1234 ») avec trois capteurs : clients connectés, clients Wi-Fi et signal le plus
+faible. Ils sont calculés uniquement à partir de la liste des clients ; aucune commande
+supplémentaire n'est envoyée aux bornes. Renommez chaque borne et attribuez-lui une
+pièce dans **Paramètres → Appareils et services → Appareils** : la carte reprend ce nom
+et cette pièce.
+
+Une borne est découverte à travers ses clients : une borne qui n'a jamais porté de
+client n'apparaît pas tant que ce n'est pas le cas.
+
+```yaml
+type: custom:tenda-mw6-topology-card
+title: Mesh Wi-Fi            # optionnel
+entry_id: abc123             # optionnel, si plusieurs mesh sont configurés
+weak_signal_threshold: -70   # optionnel, en dBm
+```
+
+La carte affiche une colonne par borne (triées par pièce puis par nom) avec ses
+clients : pastille verte à −60 dBm ou mieux, orange en dessous, rouge au seuil ou en
+dessous, icône réseau pour les clients filaires. Les interrupteurs « Hors ligne » et
+« Signal faible seulement » sont mémorisés par navigateur. Les clients dont la borne est
+inconnue sont regroupés sous « Sans borne ». Un clic sur un client ou une borne ouvre sa
+fiche.
+
+Si la carte est signalée « Custom element not found: tenda-mw6-topology-card »,
+déclarez-la comme ressource Lovelace : URL `/tenda_mw6/tenda-mw6-topology-card.js?v=1`,
+type **Module JavaScript**.
+
 ## Entités exposées
 
 Par appareil client : état en ligne, signal Wi-Fi, débit montant/descendant,
@@ -92,6 +122,10 @@ Au niveau du mesh : synthèse d'inventaire, santé du comptage de transfert,
 débits agrégés, transferts agrégés, et — en diagnostic — les **plafonds QoS
 globaux** (`QoS upload cap` / `QoS download cap`, lecture seule `QOS_GET` ;
 valeurs brutes, unité non confirmée).
+
+Par borne du mesh (un appareil par borne) : clients connectés (total en
+attribut), clients Wi-Fi et signal le plus faible (client concerné en attribut),
+tous déduits de la liste des clients.
 
 ## Architecture
 
@@ -116,6 +150,7 @@ commande `0x00` (`MESH_HOSTS_GET`).
 ```bash
 python3 -m unittest tests.test_api   # tests unitaires de l'API
 node tests/test_card.js              # logique de la carte Lovelace
+node tests/test_topology_card.js     # modèle et rendu de la carte topologie
 ```
 
 Un test d'intégration réel (login par SN + lecture des clients) a été validé
