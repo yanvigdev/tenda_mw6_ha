@@ -8,17 +8,17 @@
         "data": {
           "host": "Host",
           "port": "Port",
-          "login_account": "Login account"
+          "serial": "Serial number"
         },
         "data_description": {
-          "login_account": "32-character account value extracted from a successful official-app LOGIN capture. Use tools/mw6_auth_extract.py; do not publish this value."
+          "serial": "Serial number of any mesh node, printed under the unit and encoded in its QR code (e.g. E00000000000000000). No packet capture is required."
         }
       }
     },
     "error": {
       "cannot_connect": "Cannot connect to the router or read the client list.",
-      "invalid_auth": "The router rejected the login account.",
-      "invalid_account": "The login account must contain exactly 32 hexadecimal characters."
+      "invalid_auth": "The router rejected the serial number.",
+      "invalid_serial": "The serial number must be alphanumeric (6 to 32 characters)."
     },
     "abort": {
       "already_configured": "This Tenda MW6 host is already configured."

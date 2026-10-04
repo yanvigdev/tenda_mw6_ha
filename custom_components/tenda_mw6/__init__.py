@@ -13,7 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .api import TendaMW6Api, extract_login_account
+from .api import TendaMW6Api
 from .coordinator import TendaMW6Coordinator
 
 DOMAIN = "tenda_mw6"
@@ -22,9 +22,10 @@ PLATFORMS: tuple[Platform, ...] = (
     Platform.BINARY_SENSOR,
     Platform.SELECT,
 )
-CONF_LOGIN_ACCOUNT = "login_account"
+# Configuration key: a node serial number, used for local authentication
+# (qrmsg field of the LoginMsg). Replaces the former 32-hex "account".
+CONF_SERIAL = "serial"
 CONF_DEVICE_ALIASES = "device_aliases"
-LEGACY_LOGIN_PAYLOAD = "login_payload_hex"
 FRONTEND_URL = f"/{DOMAIN}/tenda-mw6-card.js"
 FRONTEND_PATH = Path(__file__).with_name("tenda-mw6-card.js")
 
@@ -95,23 +96,18 @@ def parse_device_aliases(raw: str) -> dict[str, str]:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate v1 entries from a raw LoginMsg payload to the account value."""
-    if entry.version >= 2:
-        return True
+    """Migrate config entries to the "serial number" schema.
 
-    if entry.version == 1:
-        data = dict(entry.data)
-        legacy_hex = data.pop(LEGACY_LOGIN_PAYLOAD, None)
-        if legacy_hex is None:
-            return False
-        try:
-            account = extract_login_account(bytes.fromhex(str(legacy_hex).replace(" ", "")))
-        except (ValueError, UnicodeError):
-            return False
-        data[CONF_LOGIN_ACCOUNT] = account
-        hass.config_entries.async_update_entry(entry, data=data, version=2)
-        return True
+    Older schemas (v1: raw LoginMsg payload; v2: 32-hex "account") cannot be
+    converted automatically to a serial number: the value cannot be derived.
+    Migration is therefore refused to force a simple reconfiguration by the user
+    (entering the serial number, no capture needed).
 
+    Entries already on v3 (the current schema) are accepted as-is.
+    """
+    if entry.version >= 3:
+        return True
+    # v1/v2: no conversion possible -> the user re-creates the integration.
     return False
 
 
@@ -121,7 +117,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     api = TendaMW6Api(
         host=entry.data["host"],
         port=int(entry.data.get("port", 9000)),
-        login_account=str(entry.data[CONF_LOGIN_ACCOUNT]),
+        serial=str(entry.data[CONF_SERIAL]),
     )
     aliases = parse_device_aliases(str(entry.options.get(CONF_DEVICE_ALIASES, "")))
     coordinator = TendaMW6Coordinator(hass, api, device_aliases=aliases)

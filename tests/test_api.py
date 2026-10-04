@@ -45,6 +45,28 @@ class InventorySummaryTest(unittest.TestCase):
         self.assertEqual(len(clients), 1)
         self.assertEqual(clients[0].access, "wired")
 
+    def test_build_login_payload_uses_serial_as_qrmsg(self) -> None:
+        """The LoginMsg must carry the serial number in the qrmsg field (field 2)."""
+        serial = "E00000000000000000"
+        payload = API.build_login_payload(serial)
+        # Expected protobuf format: tag 0x12 (field 2, length-delimited) + length + ASCII serial.
+        self.assertEqual(payload, b"\x12" + bytes([len(serial)]) + serial.encode("ascii"))
+
+    def test_build_login_payload_rejects_empty_serial(self) -> None:
+        with self.assertRaises(ValueError):
+            API.build_login_payload("")
+
+    def test_build_login_payload_rejects_invalid_serial(self) -> None:
+        with self.assertRaises(ValueError):
+            API.build_login_payload("bad serial !")
+
+    def test_build_login_payload_trims_surrounding_whitespace(self) -> None:
+        serial = "E00000000000000000"
+        self.assertEqual(
+            API.build_login_payload(f"  {serial}\n"),
+            b"\x12" + bytes([len(serial)]) + serial.encode("ascii"),
+        )
+
     def test_estimate_transfer_uses_kib_per_second(self) -> None:
         self.assertEqual(API.estimate_transfer_bytes(3, 10.5), 32256.0)
         self.assertEqual(API.estimate_transfer_bytes(None, 10), 0.0)
