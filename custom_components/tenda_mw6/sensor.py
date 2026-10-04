@@ -7,6 +7,7 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, Sen
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, UnitOfInformation
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -16,6 +17,7 @@ from homeassistant.util import dt as dt_util
 from . import DOMAIN
 from .api import TendaMW6Client, TendaMW6NodeSummary, estimate_transfer_bytes
 from .coordinator import TendaMW6Coordinator
+from .node_identity import node_device_identifier, node_sn_from_device_identifier
 
 
 async def async_setup_entry(
@@ -75,14 +77,19 @@ async def async_setup_entry(
 
     known_nodes: set[str] = set()
 
-    def add_new_nodes() -> None:
+    def add_new_nodes(node_serials: list[str] | None = None) -> None:
         """Create the device and sensors of every node serial seen for the first time.
 
-        Nodes are only discovered through the clients they carry; once created, their
+        Nodes are discovered through the clients they carry; once created, their
         entities persist even if the node later carries no client.
+
+        Args:
+            node_serials: Serials to consider; defaults to the nodes of the last poll
+                (the coordinator listener calls this without arguments).
         """
         entities: list[SensorEntity] = []
-        for node_sn in coordinator.node_summaries:
+        serials = node_serials if node_serials is not None else list(coordinator.node_summaries)
+        for node_sn in serials:
             if node_sn in known_nodes:
                 continue
             known_nodes.add(node_sn)
@@ -97,8 +104,30 @@ async def async_setup_entry(
         if entities:
             async_add_entities(entities)
 
-    add_new_nodes()
+    # Recreate the nodes already known to the device registry first: a node that
+    # carries no client at startup must keep its entities (and its card column).
+    add_new_nodes(_registered_node_serials(hass, entry) + list(coordinator.node_summaries))
     entry.async_on_unload(coordinator.async_add_listener(add_new_nodes))
+
+
+def _registered_node_serials(hass: HomeAssistant, entry: ConfigEntry) -> list[str]:
+    """Return the serials of the node devices already registered for this entry.
+
+    The serial is read back from the device identifier, which keeps its original
+    case (entity unique ids are lower-cased and cannot be used for this).
+    """
+    registry = dr.async_get(hass)
+    serials: list[str] = []
+    for device in dr.async_entries_for_config_entry(registry, entry.entry_id):
+        for domain, identifier in device.identifiers:
+            node_sn = (
+                node_sn_from_device_identifier(entry.entry_id, identifier)
+                if domain == DOMAIN
+                else None
+            )
+            if node_sn:
+                serials.append(node_sn)
+    return serials
 
 
 class TendaMW6InventoryHealthSensor(CoordinatorEntity[TendaMW6Coordinator], SensorEntity):
@@ -821,7 +850,7 @@ class TendaMW6NodeSensorBase(CoordinatorEntity[TendaMW6Coordinator], SensorEntit
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(DOMAIN, f"{self._entry.entry_id}:node:{self._node_sn}")},
+            identifiers={(DOMAIN, node_device_identifier(self._entry.entry_id, self._node_sn))},
             # Default name only: a name set by the user in HA takes precedence.
             name=f"Tenda MW6 node …{self._node_sn[-4:]}",
             manufacturer="Tenda",

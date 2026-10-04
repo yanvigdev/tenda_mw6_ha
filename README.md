@@ -145,7 +145,7 @@ Frame: `24 00 07 TT 00 d5 LLLL MM CC 00 00 01 00 00 00 [payload]`
 ## Tests
 
 ```bash
-python3 -m unittest tests.test_api   # API unit tests
+python3 -m unittest tests.test_api tests.test_node_identity   # API and node id unit tests
 node tests/test_card.js              # Lovelace card logic
 node tests/test_topology_card.js     # topology card model and rendering
 ```

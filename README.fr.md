@@ -148,7 +148,7 @@ commande `0x00` (`MESH_HOSTS_GET`).
 ## Tests
 
 ```bash
-python3 -m unittest tests.test_api   # tests unitaires de l'API
+python3 -m unittest tests.test_api tests.test_node_identity   # tests unitaires API et identifiants de borne
 node tests/test_card.js              # logique de la carte Lovelace
 node tests/test_topology_card.js     # modèle et rendu de la carte topologie
 ```

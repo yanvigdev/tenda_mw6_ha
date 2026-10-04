@@ -6,8 +6,9 @@
  * Nodes are Home Assistant devices: their name and area come from the device registry,
  * so renaming a node or assigning it an area in HA is reflected here.
  *
- * Every top-level identifier is prefixed with mw6t / MW6T_ so this classic script never
- * collides with tenda-mw6-card.js when both are loaded on the same page.
+ * Every top-level identifier is prefixed with mw6t / MW6T_. Home Assistant loads both
+ * card files as ES modules (no shared scope), but the prefix keeps them distinct if a
+ * file is ever loaded as a classic script, and makes this card's helpers easy to spot.
  *
  * Dashboard:
  *   type: custom:tenda-mw6-topology-card
