@@ -20,6 +20,21 @@ from .api import (
 )
 
 
+# Poll period of the MW6 HostList. 60 s keeps the Home Assistant recorder
+# reasonable: every poll rewrites ~500 entities (12 sensors + 1 binary sensor
+# per Wi-Fi client), and at the former 10 s period this meant ~8,600 state rows
+# per entity and per day.
+UPDATE_INTERVAL = timedelta(seconds=60)
+
+# Largest gap between two rate samples that the transfer counters still
+# integrate. Three poll periods tolerate one or two missed polls without
+# turning a long outage into an invented transfer span (rate x gap).
+#
+# Example: with a 60 s period, samples 60 s or 120 s apart are integrated,
+# a 200 s gap (after a router reboot) is skipped.
+MAX_TRANSFER_SAMPLE_GAP_SECONDS = 3 * UPDATE_INTERVAL.total_seconds()
+
+
 class TendaMW6Coordinator(DataUpdateCoordinator[list[TendaMW6Client]]):
     """Poll the MW6 local TCP/9000 API."""
 
@@ -33,7 +48,7 @@ class TendaMW6Coordinator(DataUpdateCoordinator[list[TendaMW6Client]]):
             hass,
             logger=__import__("logging").getLogger(__name__),
             name="Tenda MW6 clients",
-            update_interval=timedelta(seconds=10),
+            update_interval=UPDATE_INTERVAL,
         )
         self.api = api
         self.device_aliases = device_aliases or {}

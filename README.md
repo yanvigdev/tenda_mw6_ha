@@ -130,7 +130,7 @@ attributes), all derived from the client list.
   (protobuf field 2); `get_clients()` chains `GET_STA` → `LOGIN` →
   `MESH_HOSTS_GET` and decodes the host list.
 - `config_flow.py`: input and validation (host, port, serial number).
-- `coordinator.py`: periodic polling.
+- `coordinator.py`: periodic polling, every 60 s (`UPDATE_INTERVAL`); transfer counters skip gaps longer than three periods.
 - `sensor.py` / `binary_sensor.py` / `select.py`: exposed entities.
 - `tenda-mw6-card.js`: Lovelace card (device list).
 - `tenda-mw6-topology-card.js`: Lovelace topology card (one column per node).

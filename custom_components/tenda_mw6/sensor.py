@@ -16,7 +16,7 @@ from homeassistant.util import dt as dt_util
 
 from . import DOMAIN
 from .api import TendaMW6Client, TendaMW6NodeSummary, estimate_transfer_bytes
-from .coordinator import TendaMW6Coordinator
+from .coordinator import MAX_TRANSFER_SAMPLE_GAP_SECONDS, TendaMW6Coordinator
 from .node_identity import node_device_identifier, node_sn_from_device_identifier
 
 
@@ -404,7 +404,7 @@ class TendaMW6AggregateTransferSensor(TendaMW6AggregateSensorBase, RestoreEntity
             self._has_valid_sample = True
             if self._last_sample_at is not None and self._last_rate_kib_s is not None:
                 elapsed = (now - self._last_sample_at).total_seconds()
-                if 0 < elapsed <= 30:
+                if 0 < elapsed <= MAX_TRANSFER_SAMPLE_GAP_SECONDS:
                     self._total_bytes += estimate_transfer_bytes(self._last_rate_kib_s, elapsed)
             self._last_sample_at = now
             self._last_rate_kib_s = rate
@@ -774,7 +774,7 @@ class TendaMW6ClientTransferSensor(TendaMW6ClientSensorBase, RestoreEntity):
             if self._last_sample_at is not None and self._last_rate_kib_s is not None:
                 elapsed = (now - self._last_sample_at).total_seconds()
                 # Do not turn a delayed or missed poll into an invented transfer span.
-                if 0 < elapsed <= 30:
+                if 0 < elapsed <= MAX_TRANSFER_SAMPLE_GAP_SECONDS:
                     self._total_bytes += estimate_transfer_bytes(self._last_rate_kib_s, elapsed)
             self._last_sample_at = now
             self._last_rate_kib_s = rate

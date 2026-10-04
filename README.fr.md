@@ -134,7 +134,7 @@ tous déduits de la liste des clients.
   (protobuf champ 2) ; `get_clients()` enchaîne `GET_STA` → `LOGIN` →
   `MESH_HOSTS_GET` et décode la liste des hôtes.
 - `config_flow.py` : saisie et validation (hôte, port, numéro de série).
-- `coordinator.py` : sondage périodique.
+- `coordinator.py` : sondage périodique, toutes les 60 s (`UPDATE_INTERVAL`) ; les compteurs de transfert ignorent un écart de plus de trois périodes.
 - `sensor.py` / `binary_sensor.py` / `select.py` : entités exposées.
 - `tenda-mw6-card.js` : carte Lovelace.
 

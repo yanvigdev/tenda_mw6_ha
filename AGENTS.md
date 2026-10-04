@@ -14,8 +14,10 @@ Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
   - `__init__.py`: `CONF_SERIAL = "serial"`. Config schema **version 3**.
     `async_migrate_entry` refuses v1/v2 (no conversion to a serial is possible).
   - `config_flow.py`: host / port / serial input, with real validation.
-  - `coordinator.py`: client poll + best-effort QoS read (a QoS failure never
-    fails the client poll).
+  - `coordinator.py`: client poll every 60 s (`UPDATE_INTERVAL`, raised from 10 s
+    to limit HA recorder writes) + best-effort QoS read (a QoS failure never
+    fails the client poll). `MAX_TRANSFER_SAMPLE_GAP_SECONDS` (3 periods) bounds
+    the rate-integration gap of the transfer sensors: keep it tied to the period.
   - `sensor.py`, `binary_sensor.py`, `select.py`.
   - `tenda-mw6-card.js`: Lovelace card (English labels, hardcoded).
   - `tenda-mw6-topology-card.js`: topology card (one column per node). Pure model
