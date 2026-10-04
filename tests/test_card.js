@@ -59,4 +59,17 @@ card._settings.unit = "GB";
 assert.match(card._rowHtml(card._devices()[0]), /GB/);
 assert.equal(card._devices().length, 2);
 
+// Localization: the card picks hass.language and falls back to English.
+const i18n = Object.create(Card.prototype);
+i18n._hass = { language: "fr" };
+assert.equal(i18n._t("device"), "Appareil");
+assert.equal(i18n._t("reverseOrder"), "Inverser l'ordre");
+i18n._hass = { language: "pl-PL" };
+assert.equal(i18n._t("device"), "Urządzenie");
+i18n._hass = { language: "de" };
+assert.equal(i18n._t("device"), "Device");
+i18n._hass = null;
+assert.equal(i18n._lang(), "en");
+assert.equal(i18n._t("loading"), "Loading…");
+
 console.log("Tenda MW6 card logic tests passed");

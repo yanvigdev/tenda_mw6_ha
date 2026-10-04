@@ -13,6 +13,47 @@ const MW6_CARD_VERSION = "1.6.3";
 const MW6_PERIODS = ["total", "day", "month"];
 const MW6_DIRECTIONS = ["download", "upload"];
 
+// Visible labels per language. The card picks the user's Home Assistant language
+// (hass.language) and falls back to English for any missing language or key.
+const MW6_I18N = {
+  en: {
+    sort: "Sort", device: "Device", ip: "IP", download: "Download", upload: "Upload",
+    transfer: "Transfer", total: "Total", today: "Today", month: "This month",
+    unit: "Unit", reverseOrder: "Reverse order",
+    online: "Online", offline: "Offline", unknownState: "Unknown state",
+    signal: "Signal", devices: "devices", onlineCount: "online",
+    transferSummary: "↓/↑ transfer:", title: "Tenda MW6 — devices",
+    meta: "Dedicated card", loading: "Loading…",
+    noDevices: "No Tenda MW6 devices found.",
+    restartHint: "After updating the integration, restart Home Assistant.",
+    unknownDevice: "Unknown device",
+  },
+  fr: {
+    sort: "Tri", device: "Appareil", ip: "IP", download: "Téléchargement", upload: "Envoi",
+    transfer: "Transfert", total: "Total", today: "Aujourd'hui", month: "Ce mois",
+    unit: "Unité", reverseOrder: "Inverser l'ordre",
+    online: "En ligne", offline: "Hors ligne", unknownState: "État inconnu",
+    signal: "Signal", devices: "appareils", onlineCount: "en ligne",
+    transferSummary: "↓/↑ transfert :", title: "Tenda MW6 — appareils",
+    meta: "Carte dédiée", loading: "Chargement…",
+    noDevices: "Aucun appareil Tenda MW6 trouvé.",
+    restartHint: "Après la mise à jour de l'intégration, redémarrez Home Assistant.",
+    unknownDevice: "Appareil inconnu",
+  },
+  pl: {
+    sort: "Sortowanie", device: "Urządzenie", ip: "IP", download: "Pobieranie", upload: "Wysyłanie",
+    transfer: "Transfer", total: "Całkowity", today: "Dzisiaj", month: "Ten miesiąc",
+    unit: "Jednostka", reverseOrder: "Odwróć kolejność",
+    online: "Online", offline: "Offline", unknownState: "Stan nieznany",
+    signal: "Sygnał", devices: "urządzeń", onlineCount: "online",
+    transferSummary: "↓/↑ transfer:", title: "Tenda MW6 — urządzenia",
+    meta: "Dedykowana karta", loading: "Ładowanie…",
+    noDevices: "Nie znaleziono urządzeń Tenda MW6.",
+    restartHint: "Po aktualizacji integracji uruchom ponownie Home Assistant.",
+    unknownDevice: "Nieznane urządzenie",
+  },
+};
+
 function mw6Escape(value) {
   return String(value == null ? "" : value)
     .replace(/&/g, "&amp;")
@@ -263,7 +304,7 @@ class TendaMW6Card extends HTMLElement {
       key: String(attrs.config_entry_id || "") + ":" + String(attrs.client_mac || ""),
       entryId: attrs.config_entry_id || "",
       mac: attrs.client_mac || "",
-      name: attrs.client_name || attrs.client_ip || "Unknown device",
+      name: attrs.client_name || attrs.client_ip || this._t("unknownDevice"),
       ip: attrs.client_ip || "",
       online: null,
       signal: null,
@@ -358,6 +399,18 @@ class TendaMW6Card extends HTMLElement {
     return devices;
   }
 
+  _lang() {
+    const raw = (this._hass && this._hass.language) || "en";
+    const base = String(raw).toLowerCase().split("-")[0];
+    return MW6_I18N[base] ? base : "en";
+  }
+
+  _t(key) {
+    const lang = this._lang();
+    const table = MW6_I18N[lang] || MW6_I18N.en;
+    return table[key] != null ? table[key] : MW6_I18N.en[key];
+  }
+
   _option(value, label, selected) {
     return '<option value="' + value + '"' +
       (value === selected ? " selected" : "") + ">" +
@@ -367,25 +420,26 @@ class TendaMW6Card extends HTMLElement {
   _controlsHtml() {
     return [
       '<div class="controls">',
-      '  <div class="control"><label for="mw6-sort">Sort</label>',
+      '  <div class="control"><label for="mw6-sort">' + mw6Escape(this._t("sort")) + "</label>",
       '    <select id="mw6-sort">',
-      this._option("device", "Device", this._settings.sort),
-      this._option("ip", "IP", this._settings.sort),
-      this._option("download", "Download", this._settings.sort),
-      this._option("upload", "Upload", this._settings.sort),
+      this._option("device", this._t("device"), this._settings.sort),
+      this._option("ip", this._t("ip"), this._settings.sort),
+      this._option("download", this._t("download"), this._settings.sort),
+      this._option("upload", this._t("upload"), this._settings.sort),
       "    </select></div>",
-      '  <div class="control"><label for="mw6-period">Transfer</label>',
+      '  <div class="control"><label for="mw6-period">' + mw6Escape(this._t("transfer")) + "</label>",
       '    <select id="mw6-period">',
-      this._option("total", "Total", this._settings.period),
-      this._option("day", "Today", this._settings.period),
-      this._option("month", "This month", this._settings.period),
+      this._option("total", this._t("total"), this._settings.period),
+      this._option("day", this._t("today"), this._settings.period),
+      this._option("month", this._t("month"), this._settings.period),
       "    </select></div>",
-      '  <div class="control"><label for="mw6-unit">Unit</label>',
+      '  <div class="control"><label for="mw6-unit">' + mw6Escape(this._t("unit")) + "</label>",
       '    <select id="mw6-unit">',
       this._option("MB", "MB", this._settings.unit),
       this._option("GB", "GB", this._settings.unit),
       "    </select></div>",
-      '  <button class="order" type="button" title="Reverse order" aria-label="Reverse order">',
+      '  <button class="order" type="button" title="' + mw6Escape(this._t("reverseOrder")) +
+        '" aria-label="' + mw6Escape(this._t("reverseOrder")) + '">',
       '    <ha-icon icon="' + (this._effectiveOrder(this._settings.sort) === "desc"
         ? "mdi:sort-descending" : "mdi:sort-ascending") + '"></ha-icon>',
       "  </button>",
@@ -395,12 +449,12 @@ class TendaMW6Card extends HTMLElement {
 
   _statusHtml(device) {
     if (device.online === true) {
-      return '<span class="dot on"></span><span>Online</span>';
+      return '<span class="dot on"></span><span>' + mw6Escape(this._t("online")) + "</span>";
     }
     if (device.online === false) {
-      return '<span class="dot off"></span><span>Offline</span>';
+      return '<span class="dot off"></span><span>' + mw6Escape(this._t("offline")) + "</span>";
     }
-    return '<span class="dot"></span><span>Unknown state</span>';
+    return '<span class="dot"></span><span>' + mw6Escape(this._t("unknownState")) + "</span>";
   }
 
   _rowHtml(device) {
@@ -433,29 +487,33 @@ class TendaMW6Card extends HTMLElement {
 
   _html() {
     if (!this._hass) {
-      return '<div class="empty"><ha-icon icon="mdi:router-wireless"></ha-icon>Loading…</div>';
+      return '<div class="empty"><ha-icon icon="mdi:router-wireless"></ha-icon>' +
+        mw6Escape(this._t("loading")) + "</div>";
     }
     const devices = this._sortedDevices();
     const online = devices.filter(function (device) { return device.online === true; }).length;
-    const title = this._config.title || "Tenda MW6 — devices";
+    const title = this._config.title || this._t("title");
     const periodLabel = {
-      total: "total",
-      day: "today",
-      month: "this month",
+      total: this._t("total"),
+      day: this._t("today"),
+      month: this._t("month"),
     }[this._settings.period];
 
     const body = devices.length
       ? [
           '<div class="summary">',
-          '<span><b>' + devices.length + "</b> devices</span>",
-          '<span><span class="dot on"></span><b>' + online + "</b> online</span>",
-          '<span>↓/↑ transfer: <b>' + periodLabel + "</b></span>",
+          '<span><b>' + devices.length + "</b> " + mw6Escape(this._t("devices")) + "</span>",
+          '<span><span class="dot on"></span><b>' + online + "</b> " +
+            mw6Escape(this._t("onlineCount")) + "</span>",
+          '<span>' + mw6Escape(this._t("transferSummary")) + " <b>" +
+            mw6Escape(periodLabel) + "</b></span>",
           "</div>",
           '<div class="table-wrap"><table>',
           "<thead><tr>",
-          "<th>Device</th><th>IP</th>",
-          '<th class="numeric">Download</th><th class="numeric">Upload</th>',
-          '<th class="numeric">Signal</th>',
+          "<th>" + mw6Escape(this._t("device")) + "</th><th>" + mw6Escape(this._t("ip")) + "</th>",
+          '<th class="numeric">' + mw6Escape(this._t("download")) + "</th>" +
+            '<th class="numeric">' + mw6Escape(this._t("upload")) + "</th>",
+          '<th class="numeric">' + mw6Escape(this._t("signal")) + "</th>",
           "</tr></thead>",
           "<tbody>",
           devices.map(this._rowHtml.bind(this)).join(""),
@@ -464,8 +522,8 @@ class TendaMW6Card extends HTMLElement {
       : [
           '<div class="empty">',
           '<ha-icon icon="mdi:devices"></ha-icon>',
-          "No Tenda MW6 devices found.",
-          '<div class="hint">After updating the integration, restart Home Assistant.</div>',
+          mw6Escape(this._t("noDevices")),
+          '<div class="hint">' + mw6Escape(this._t("restartHint")) + "</div>",
           "</div>",
         ].join("");
 
@@ -473,7 +531,7 @@ class TendaMW6Card extends HTMLElement {
       '<div class="header"><div>',
       '  <div class="title"><ha-icon icon="mdi:router-wireless"></ha-icon>' +
          mw6Escape(title) + "</div>",
-      '  <div class="meta">Dedykowana karta · v' + MW6_CARD_VERSION + "</div>",
+      '  <div class="meta">' + mw6Escape(this._t("meta")) + " · v" + MW6_CARD_VERSION + "</div>",
       "</div></div>",
       this._controlsHtml(),
       body,
