@@ -38,7 +38,9 @@ Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
 
 ```bash
 python3 -m unittest tests.test_api                     # API tests
-python3 -m doctest custom_components/tenda_mw6/api.py custom_components/tenda_mw6/node_identity.py  # doctests
+# Doctests of api.py / node_identity.py run inside unittest (load_tests). Do not use
+# `python -m doctest <file>`: it puts the package dir on sys.path and select.py
+# shadows the stdlib `select` module (fails on Python 3.12).
 node tests/test_card.js                                # card logic
 node tests/test_topology_card.js                       # topology card
 python3 -m unittest tests.test_node_identity           # node device identifiers

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import doctest
 import importlib.util
 import sys
 from pathlib import Path
@@ -42,6 +43,21 @@ class NodeIdentityTest(unittest.TestCase):
         self.assertIsNone(
             NODE_IDENTITY.node_sn_from_device_identifier("entry1", "entry1:node:")
         )
+
+
+
+def load_tests(
+    loader: unittest.TestLoader, tests: unittest.TestSuite, pattern: str | None
+) -> unittest.TestSuite:
+    """Add the module's docstring examples to the unittest run.
+
+    The module is the one loaded above from its file path, so its directory is
+    never put on ``sys.path``. ``python -m doctest <file>`` does put it there, and
+    the integration's ``select.py`` then shadows the standard ``select`` module
+    (imported by ``socket``), which fails without Home Assistant installed.
+    """
+    tests.addTests(doctest.DocTestSuite(NODE_IDENTITY))
+    return tests
 
 
 if __name__ == "__main__":

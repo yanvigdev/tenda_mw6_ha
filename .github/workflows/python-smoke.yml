@@ -37,8 +37,8 @@ jobs:
           node tests/test_card.js
           node tests/test_topology_card.js
       - name: Run MW6 protocol tests
+        # Also runs the docstring examples of api.py and node_identity.py
+        # (load_tests in the test modules).
         run: python -m unittest discover -s tests -v
-      - name: Run doctests (HA-free modules)
-        run: python -m doctest -v custom_components/tenda_mw6/api.py custom_components/tenda_mw6/node_identity.py
       - name: Check MW6 probe CLI
         run: python tools/mw6_probe.py --help

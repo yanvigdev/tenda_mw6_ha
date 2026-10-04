@@ -145,10 +145,9 @@ Frame: `24 00 07 TT 00 d5 LLLL MM CC 00 00 01 00 00 00 [payload]`
 ## Tests
 
 ```bash
-python3 -m unittest tests.test_api tests.test_node_identity   # API and node id unit tests
+python3 -m unittest discover -s tests   # API/node id unit tests + doctests
 node tests/test_card.js              # Lovelace card logic
 node tests/test_topology_card.js     # topology card model and rendering
-python3 -m doctest custom_components/tenda_mw6/api.py custom_components/tenda_mw6/node_identity.py
 ```
 
 GitHub Actions runs these checks on every push and pull request
