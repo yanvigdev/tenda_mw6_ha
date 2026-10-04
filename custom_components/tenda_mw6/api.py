@@ -14,7 +14,14 @@ AUTH_GET_STA = 0x00
 AUTH_LOGIN = 0x01
 MESH_HOSTS_MODULE = 0x14
 MESH_HOSTS_GET = 0x00
-LOGIN_ACCOUNT_RE = re.compile(r"^[0-9a-fA-F]{32}$")
+# "MESH_ADVANCE" module: advanced mesh configuration.
+# QOS_GET is an observed read-only command returning the global bandwidth caps.
+MESH_ADVANCE_MODULE = 0x17
+MESH_ADVANCE_QOS_GET = 0x08
+# Accepted format for an MW6 node serial number.
+# Observed serials are alphanumeric (e.g. "E00000000000000000"); stay lenient on
+# length while rejecting spaces and special characters.
+SERIAL_RE = re.compile(r"^[0-9A-Za-z]{6,32}$")
 
 
 class TendaMW6Error(Exception):
@@ -37,6 +44,19 @@ class TendaMW6Client:
     raw_online: int | None
     raw_uprate: int | None
     raw_downrate: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class TendaMW6Qos:
+    """Global bandwidth caps (QoS) reported by the mesh.
+
+    Values are raw, as returned by the firmware; the exact unit is unconfirmed
+    (observed at 1,024,000, likely bytes/s). They are therefore exposed as
+    diagnostics only.
+    """
+
+    up_cap: int | None
+    down_cap: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,29 +145,37 @@ def estimate_transfer_bytes(rate_kib_s: int | None, elapsed_seconds: float) -> f
     return rate_kib_s * 1024.0 * elapsed_seconds
 
 
-def build_login_payload(login_account: str) -> bytes:
-    """Build the firmware LoginMsg protobuf from its 32-character account value.
+def build_login_payload(serial: str) -> bytes:
+    """Build the LoginMsg protobuf from a node serial number.
 
-    Live official-app captures use:
-      field 1 (account): 32 ASCII hex characters
-      field 2 (qrmsg): empty string
+    Local TCP/9000 authentication does NOT require the 32-hex "account" (which
+    forced a packet capture): it is enough to place a mesh node's serial number
+    in field 2 (`qrmsg`) of the LoginMsg. The serial number is printed under each
+    unit and encoded in its QR code.
 
-    Wire form is therefore: 0a 20 <32 bytes> 12 00.
+    Field 1 (`account`) is intentionally omitted: the firmware accepts the login
+    on `qrmsg` alone.
+
+    Args:
+        serial: node serial number (e.g. "E00000000000000000").
+
+    Returns:
+        The protobuf payload: tag `0x12` (field 2, length-delimited), length,
+        then the serial in ASCII.
+
+    Raises:
+        ValueError: if the serial number is empty or malformed.
+
+    Example:
+        >>> build_login_payload("E00000000000000000").hex()
+        '1212453030303030303030303030303030303030'
     """
-    account = login_account.strip()
-    if not LOGIN_ACCOUNT_RE.fullmatch(account):
-        raise ValueError("login account must contain exactly 32 hexadecimal characters")
-    return b"\x0a\x20" + account.encode("ascii") + b"\x12\x00"
-
-
-def extract_login_account(login_payload: bytes) -> str:
-    """Extract the 32-character account from a captured LoginMsg payload."""
-    if len(login_payload) != 36 or login_payload[:2] != b"\x0a\x20" or login_payload[34:] != b"\x12\x00":
-        raise ValueError("unsupported MW6 LoginMsg payload shape")
-    account = login_payload[2:34].decode("ascii", "strict")
-    if not LOGIN_ACCOUNT_RE.fullmatch(account):
-        raise ValueError("invalid MW6 login account")
-    return account
+    value = serial.strip()
+    if not SERIAL_RE.fullmatch(value):
+        raise ValueError("serial number must be alphanumeric (6 to 32 characters)")
+    encoded = value.encode("ascii")
+    # Protobuf field 2 (qrmsg), wire type 2 (length-delimited) -> tag 0x12.
+    return b"\x12" + bytes([len(encoded)]) + encoded
 
 
 class TendaMW6Api:
@@ -156,40 +184,86 @@ class TendaMW6Api:
     def __init__(
         self,
         host: str,
-        login_account: str,
+        serial: str,
         port: int = 9000,
         timeout: float = 4.0,
     ) -> None:
+        """Initialize the client.
+
+        Args:
+            host: IP of the master node (the one exposing TCP port 9000).
+            serial: serial number of a mesh node, used for login.
+            port: TCP port (9000 by default).
+            timeout: exchange timeout, in seconds.
+        """
         self.host = host
         self.port = port
         self.timeout = timeout
-        self._login_payload = build_login_payload(login_account)
+        self._login_payload = build_login_payload(serial)
 
     def validate(self) -> None:
         """Authenticate and verify that MESH_HOSTS can be read."""
         self.get_clients()
 
+    def _authenticate(self, sock: socket.socket) -> int:
+        """Perform GET_STA then LOGIN on an open connection.
+
+        Centralizes the authentication sequence shared by the read operations.
+
+        Args:
+            sock: TCP connection already opened to the master node.
+
+        Returns:
+            The next transaction id to use.
+
+        Raises:
+            TendaMW6AuthError: if the router rejects the serial number.
+        """
+        tid = 0xA0
+        sock.sendall(_build_request(tid, AUTH_MODULE, AUTH_GET_STA))
+        _expect_response(_recv_frame(sock), AUTH_MODULE, AUTH_GET_STA)
+
+        tid = (tid + 1) & 0xFF
+        sock.sendall(_build_request(tid, AUTH_MODULE, AUTH_LOGIN, self._login_payload))
+        login = _expect_response(_recv_frame(sock), AUTH_MODULE, AUTH_LOGIN)
+        if _status(login["payload"]) != 0:
+            raise TendaMW6AuthError("Router rejected the serial number")
+        return (tid + 1) & 0xFF
+
     def get_clients(self) -> list[TendaMW6Client]:
         with socket.create_connection((self.host, self.port), timeout=self.timeout) as sock:
             sock.settimeout(self.timeout)
-            tid = 0xA0
+            tid = self._authenticate(sock)
 
-            sock.sendall(_build_request(tid, AUTH_MODULE, AUTH_GET_STA))
-            _expect_response(_recv_frame(sock), AUTH_MODULE, AUTH_GET_STA)
-
-            tid = (tid + 1) & 0xFF
-            sock.sendall(_build_request(tid, AUTH_MODULE, AUTH_LOGIN, self._login_payload))
-            login = _expect_response(_recv_frame(sock), AUTH_MODULE, AUTH_LOGIN)
-            if _status(login["payload"]) != 0:
-                raise TendaMW6AuthError("Router rejected login account")
-
-            tid = (tid + 1) & 0xFF
             sock.sendall(_build_request(tid, MESH_HOSTS_MODULE, MESH_HOSTS_GET))
             hosts = _expect_response(_recv_frame(sock), MESH_HOSTS_MODULE, MESH_HOSTS_GET)
             status, records = _decode_mesh_hosts(hosts["payload"])
             if status != 0:
                 raise TendaMW6Error(f"MESH_HOSTS returned status={status}")
             return records
+
+    def get_qos(self) -> TendaMW6Qos:
+        """Read the global bandwidth caps (QoS) of the mesh.
+
+        **Read-only** operation (QOS_GET, observed). No write is sent to the
+        router.
+
+        Returns:
+            The up/down caps (raw, unit unconfirmed).
+
+        Raises:
+            TendaMW6AuthError: if authentication fails.
+            TendaMW6Error / OSError: on a network or response problem.
+        """
+        with socket.create_connection((self.host, self.port), timeout=self.timeout) as sock:
+            sock.settimeout(self.timeout)
+            tid = self._authenticate(sock)
+
+            sock.sendall(_build_request(tid, MESH_ADVANCE_MODULE, MESH_ADVANCE_QOS_GET))
+            resp = _expect_response(
+                _recv_frame(sock), MESH_ADVANCE_MODULE, MESH_ADVANCE_QOS_GET
+            )
+            return _decode_qos(resp["payload"])
 
 
 def _build_request(tid: int, module: int, command: int, payload: bytes = b"") -> bytes:
@@ -243,6 +317,25 @@ def _status(payload: bytes) -> int:
     if len(payload) < 4:
         raise TendaMW6Error("Response payload too short")
     return int.from_bytes(payload[:4], "little", signed=True)
+
+
+def _decode_qos(payload: bytes) -> TendaMW6Qos:
+    """Decode the QOS_GET response into up/down caps.
+
+    The up cap is protobuf field 2, the down cap is field 3. Missing fields yield
+    ``None`` (rather than an error), since the QoS configuration may be empty.
+
+    Example:
+        >>> q = _decode_qos(bytes.fromhex("0000000008001080c03e1880c03e2000"))
+        >>> (q.up_cap, q.down_cap)
+        (1024000, 1024000)
+    """
+    _status(payload)  # validates length; the status itself is unused here
+    values: dict[int, int] = {}
+    for field_no, wire_type, value in _protobuf_fields(payload[4:]):
+        if wire_type == 0 and isinstance(value, int):
+            values[field_no] = value
+    return TendaMW6Qos(up_cap=values.get(2), down_cap=values.get(3))
 
 
 def _read_varint(buf: bytes, pos: int) -> tuple[int, int]:

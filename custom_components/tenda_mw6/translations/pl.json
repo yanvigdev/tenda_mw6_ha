@@ -8,17 +8,17 @@
         "data": {
           "host": "Adres hosta",
           "port": "Port",
-          "login_account": "Konto logowania"
+          "serial": "Numer seryjny"
         },
         "data_description": {
-          "login_account": "32-znakowa wartość konta wyciągnięta z udanego logowania oficjalnej aplikacji. Użyj tools/mw6_auth_extract.py i nie publikuj tej wartości."
+          "serial": "Numer seryjny dowolnego węzła mesh, nadrukowany pod urządzeniem i zakodowany w jego kodzie QR (np. E00000000000000000). Przechwytywanie ruchu nie jest potrzebne."
         }
       }
     },
     "error": {
       "cannot_connect": "Nie można połączyć się z routerem lub odczytać listy klientów.",
-      "invalid_auth": "Router odrzucił konto logowania.",
-      "invalid_account": "Konto logowania musi zawierać dokładnie 32 znaki szesnastkowe."
+      "invalid_auth": "Router odrzucił numer seryjny.",
+      "invalid_serial": "Numer seryjny musi być alfanumeryczny (6 do 32 znaków)."
     },
     "abort": {
       "already_configured": "Ten host Tenda MW6 jest już skonfigurowany."
@@ -39,6 +39,22 @@
     },
     "error": {
       "invalid_aliases": "Każdy wiersz musi mieć format IP | MAC = nazwa. Nazwa może być pusta."
+    }
+  },
+  "entity": {
+    "select": {
+      "dashboard_sort": {
+        "name": "Sortowanie",
+        "state": {
+          "device": "Urządzenie",
+          "ip": "IP",
+          "download": "Pobieranie",
+          "upload": "Wysyłanie"
+        }
+      },
+      "transfer_unit": {
+        "name": "Jednostka transferu"
+      }
     }
   }
 }

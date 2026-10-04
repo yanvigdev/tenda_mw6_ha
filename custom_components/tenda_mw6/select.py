@@ -11,11 +11,14 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import DOMAIN
 
-SORT_OPTIONS = ["Urządzenie", "IP", "Download", "Upload"]
+# Sort options as stable keys; their display labels are localized through the
+# entity translations (entity.select.dashboard_sort.state.*).
+SORT_OPTIONS = ["device", "ip", "download", "upload"]
+# Units are universal and not translated.
 UNIT_OPTIONS = ["MB", "GB"]
 
 SELECT_ENTITY_IDS = {
-    "dashboard_sort": f"{SELECT_DOMAIN}.tenda_mw6_sortowanie",
+    "dashboard_sort": f"{SELECT_DOMAIN}.tenda_mw6_dashboard_sort",
     "transfer_unit": f"{SELECT_DOMAIN}.tenda_mw6_transfer_unit",
 }
 
@@ -51,16 +54,16 @@ async def async_setup_entry(
                 entry=entry,
                 unique_suffix="dashboard_sort",
                 entity_id=SELECT_ENTITY_IDS["dashboard_sort"],
-                name="Dashboard sorting",
+                translation_key="dashboard_sort",
                 icon="mdi:sort",
                 options=SORT_OPTIONS,
-                default="Urządzenie",
+                default="device",
             ),
             TendaMW6PreferenceSelect(
                 entry=entry,
                 unique_suffix="transfer_unit",
                 entity_id=SELECT_ENTITY_IDS["transfer_unit"],
-                name="Transfer display unit",
+                translation_key="transfer_unit",
                 icon="mdi:database",
                 options=UNIT_OPTIONS,
                 default="MB",
@@ -80,7 +83,7 @@ class TendaMW6PreferenceSelect(SelectEntity, RestoreEntity):
         entry: ConfigEntry,
         unique_suffix: str,
         entity_id: str,
-        name: str,
+        translation_key: str,
         icon: str,
         options: list[str],
         default: str,
@@ -88,7 +91,8 @@ class TendaMW6PreferenceSelect(SelectEntity, RestoreEntity):
         self._entry = entry
         self.entity_id = entity_id
         self._attr_unique_id = f"{entry.entry_id}_{unique_suffix}"
-        self._attr_name = name
+        # The display name and option labels are resolved from the translations.
+        self._attr_translation_key = translation_key
         self._attr_icon = icon
         self._attr_options = options
         self._attr_current_option = default

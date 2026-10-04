@@ -1,0 +1,61 @@
+{
+  "title": "Tenda MW6",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connexion au Tenda MW6",
+        "description": "Connexion directe au service local Tenda MW6 (TCP/9000). Aucun cloud Tenda n'est utilisé.",
+        "data": {
+          "host": "Hôte",
+          "port": "Port",
+          "serial": "Numéro de série"
+        },
+        "data_description": {
+          "host": "Adresse IP du nœud maître (celui qui expose le port 9000, ex. 192.168.0.1).",
+          "serial": "Numéro de série d'un nœud du mesh, imprimé sous la borne et contenu dans son QR code (ex. E00000000000000000). Aucune capture réseau n'est nécessaire."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de joindre la borne ou de lire la liste des clients.",
+      "invalid_auth": "La borne a refusé le numéro de série.",
+      "invalid_serial": "Le numéro de série doit être alphanumérique (6 à 32 caractères)."
+    },
+    "abort": {
+      "already_configured": "Cet hôte Tenda MW6 est déjà configuré."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Correspondance des appareils",
+        "description": "L'intégration a listé tous les appareils actuellement connus de la borne. Chaque ligne contient son IP, sa MAC et son nom. Modifiez le texte après le signe =. Laissez-le vide pour afficher l'IP.",
+        "data": {
+          "device_aliases": "IP | MAC = nom"
+        },
+        "data_description": {
+          "device_aliases": "Conservez l'IP et la MAC. Un nom vide après le = force l'affichage de l'IP. Supprimer la ligne entière restaure le nom signalé par la borne."
+        }
+      }
+    },
+    "error": {
+      "invalid_aliases": "Chaque ligne doit respecter le format IP | MAC = nom. Le nom peut être vide."
+    }
+  },
+  "entity": {
+    "select": {
+      "dashboard_sort": {
+        "name": "Tri du tableau de bord",
+        "state": {
+          "device": "Appareil",
+          "ip": "IP",
+          "download": "Téléchargement",
+          "upload": "Envoi"
+        }
+      },
+      "transfer_unit": {
+        "name": "Unité d'affichage du transfert"
+      }
+    }
+  }
+}

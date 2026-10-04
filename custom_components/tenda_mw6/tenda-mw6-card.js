@@ -6,7 +6,7 @@
  *
  * Dashboard:
  *   type: custom:tenda-mw6-card
- *   title: Tenda MW6 — urządzenia
+ *   title: Tenda MW6 — devices
  */
 
 const MW6_CARD_VERSION = "1.6.3";
@@ -49,7 +49,7 @@ function mw6CompareIp(left, right) {
   if (a !== null && b !== null) return a - b;
   if (a !== null) return -1;
   if (b !== null) return 1;
-  return String(left || "").localeCompare(String(right || ""), "pl", {
+  return String(left || "").localeCompare(String(right || ""), "en", {
     numeric: true,
     sensitivity: "base",
   });
@@ -135,7 +135,7 @@ const MW6_STYLES = [
   "ha-card.compact td.numeric::before { display:block; margin-bottom:3px; color:var(--secondary-text-color); font-size:.65rem; text-transform:uppercase; }",
   "ha-card.compact td.download-cell::before { content:'Download'; }",
   "ha-card.compact td.upload-cell::before { content:'Upload'; }",
-  "ha-card.compact td.signal-cell::before { content:'Sygnał'; }",
+  "ha-card.compact td.signal-cell::before { content:'Signal'; }",
   "ha-card.compact .device-name { max-width:180px; }",
 ].join("\n");
 
@@ -173,7 +173,7 @@ class TendaMW6Card extends HTMLElement {
   }
 
   static getStubConfig() {
-    return { title: "Tenda MW6 — urządzenia" };
+    return { title: "Tenda MW6 — devices" };
   }
 
   setConfig(config) {
@@ -263,7 +263,7 @@ class TendaMW6Card extends HTMLElement {
       key: String(attrs.config_entry_id || "") + ":" + String(attrs.client_mac || ""),
       entryId: attrs.config_entry_id || "",
       mac: attrs.client_mac || "",
-      name: attrs.client_name || attrs.client_ip || "Nieznane urządzenie",
+      name: attrs.client_name || attrs.client_ip || "Unknown device",
       ip: attrs.client_ip || "",
       online: null,
       signal: null,
@@ -342,13 +342,13 @@ class TendaMW6Card extends HTMLElement {
         if (a !== null && b === null) return -1;
         result = (a || 0) - (b || 0);
       } else {
-        result = left.name.localeCompare(right.name, "pl", {
+        result = left.name.localeCompare(right.name, "en", {
           numeric: true,
           sensitivity: "base",
         });
       }
       if (result === 0) {
-        result = left.name.localeCompare(right.name, "pl", {
+        result = left.name.localeCompare(right.name, "en", {
           numeric: true,
           sensitivity: "base",
         });
@@ -367,25 +367,25 @@ class TendaMW6Card extends HTMLElement {
   _controlsHtml() {
     return [
       '<div class="controls">',
-      '  <div class="control"><label for="mw6-sort">Sortowanie</label>',
+      '  <div class="control"><label for="mw6-sort">Sort</label>',
       '    <select id="mw6-sort">',
-      this._option("device", "Urządzenie", this._settings.sort),
+      this._option("device", "Device", this._settings.sort),
       this._option("ip", "IP", this._settings.sort),
       this._option("download", "Download", this._settings.sort),
       this._option("upload", "Upload", this._settings.sort),
       "    </select></div>",
       '  <div class="control"><label for="mw6-period">Transfer</label>',
       '    <select id="mw6-period">',
-      this._option("total", "Całkowity", this._settings.period),
-      this._option("day", "Dzisiaj", this._settings.period),
-      this._option("month", "Ten miesiąc", this._settings.period),
+      this._option("total", "Total", this._settings.period),
+      this._option("day", "Today", this._settings.period),
+      this._option("month", "This month", this._settings.period),
       "    </select></div>",
-      '  <div class="control"><label for="mw6-unit">Jednostka</label>',
+      '  <div class="control"><label for="mw6-unit">Unit</label>',
       '    <select id="mw6-unit">',
       this._option("MB", "MB", this._settings.unit),
       this._option("GB", "GB", this._settings.unit),
       "    </select></div>",
-      '  <button class="order" type="button" title="Odwróć kolejność" aria-label="Odwróć kolejność">',
+      '  <button class="order" type="button" title="Reverse order" aria-label="Reverse order">',
       '    <ha-icon icon="' + (this._effectiveOrder(this._settings.sort) === "desc"
         ? "mdi:sort-descending" : "mdi:sort-ascending") + '"></ha-icon>',
       "  </button>",
@@ -400,7 +400,7 @@ class TendaMW6Card extends HTMLElement {
     if (device.online === false) {
       return '<span class="dot off"></span><span>Offline</span>';
     }
-    return '<span class="dot"></span><span>Stan nieznany</span>';
+    return '<span class="dot"></span><span>Unknown state</span>';
   }
 
   _rowHtml(device) {
@@ -433,29 +433,29 @@ class TendaMW6Card extends HTMLElement {
 
   _html() {
     if (!this._hass) {
-      return '<div class="empty"><ha-icon icon="mdi:router-wireless"></ha-icon>Ładowanie…</div>';
+      return '<div class="empty"><ha-icon icon="mdi:router-wireless"></ha-icon>Loading…</div>';
     }
     const devices = this._sortedDevices();
     const online = devices.filter(function (device) { return device.online === true; }).length;
-    const title = this._config.title || "Tenda MW6 — urządzenia";
+    const title = this._config.title || "Tenda MW6 — devices";
     const periodLabel = {
-      total: "całkowity",
-      day: "dzisiaj",
-      month: "ten miesiąc",
+      total: "total",
+      day: "today",
+      month: "this month",
     }[this._settings.period];
 
     const body = devices.length
       ? [
           '<div class="summary">',
-          '<span><b>' + devices.length + "</b> urządzeń</span>",
+          '<span><b>' + devices.length + "</b> devices</span>",
           '<span><span class="dot on"></span><b>' + online + "</b> online</span>",
           '<span>↓/↑ transfer: <b>' + periodLabel + "</b></span>",
           "</div>",
           '<div class="table-wrap"><table>',
           "<thead><tr>",
-          "<th>Urządzenie</th><th>IP</th>",
+          "<th>Device</th><th>IP</th>",
           '<th class="numeric">Download</th><th class="numeric">Upload</th>',
-          '<th class="numeric">Sygnał</th>',
+          '<th class="numeric">Signal</th>',
           "</tr></thead>",
           "<tbody>",
           devices.map(this._rowHtml.bind(this)).join(""),
@@ -464,8 +464,8 @@ class TendaMW6Card extends HTMLElement {
       : [
           '<div class="empty">',
           '<ha-icon icon="mdi:devices"></ha-icon>',
-          "Nie znaleziono urządzeń Tenda MW6.",
-          '<div class="hint">Po aktualizacji integracji uruchom ponownie Home Assistant.</div>',
+          "No Tenda MW6 devices found.",
+          '<div class="hint">After updating the integration, restart Home Assistant.</div>',
           "</div>",
         ].join("");
 
@@ -542,7 +542,7 @@ if (!window.customCards.some(function (card) { return card.type === "tenda-mw6-c
   window.customCards.push({
     type: "tenda-mw6-card",
     name: "Tenda MW6 Devices Card",
-    description: "Lista urządzeń MW6 z transferem, jednostkami i sortowaniem.",
+    description: "List of MW6 devices with transfer, units and sorting.",
     preview: true,
   });
 }

@@ -15,23 +15,28 @@ from homeassistant.helpers import selector
 
 from . import (
     CONF_DEVICE_ALIASES,
+    CONF_SERIAL,
     DOMAIN,
     parse_device_aliases,
 )
-from .api import LOGIN_ACCOUNT_RE, TendaMW6Api, TendaMW6AuthError, TendaMW6Error
-
-CONF_LOGIN_ACCOUNT = "login_account"
+from .api import SERIAL_RE, TendaMW6Api, TendaMW6AuthError, TendaMW6Error
 
 
 async def _validate_input(hass: HomeAssistant, data: dict) -> None:
-    login_account = str(data[CONF_LOGIN_ACCOUNT]).strip()
-    if not LOGIN_ACCOUNT_RE.fullmatch(login_account):
-        raise ValueError("invalid_login_account")
+    """Validate the serial number format then test the real connection.
+
+    Raises ``ValueError`` if the serial number is malformed, or a
+    ``TendaMW6*``/network exception if the router is unreachable or rejects
+    authentication.
+    """
+    serial = str(data[CONF_SERIAL]).strip()
+    if not SERIAL_RE.fullmatch(serial):
+        raise ValueError("invalid_serial")
 
     api = TendaMW6Api(
         host=str(data[CONF_HOST]),
         port=int(data[CONF_PORT]),
-        login_account=login_account,
+        serial=serial,
     )
     await hass.async_add_executor_job(api.validate)
 
@@ -39,7 +44,7 @@ async def _validate_input(hass: HomeAssistant, data: dict) -> None:
 class TendaMW6ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Tenda MW6."""
 
-    VERSION = 2
+    VERSION = 3
 
     @staticmethod
     @callback
@@ -58,10 +63,10 @@ class TendaMW6ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except (TendaMW6Error, socket.timeout, OSError):
                 errors["base"] = "cannot_connect"
             except ValueError:
-                errors["base"] = "invalid_account"
+                errors["base"] = "invalid_serial"
             else:
                 host = str(user_input[CONF_HOST]).strip()
-                account = str(user_input[CONF_LOGIN_ACCOUNT]).strip()
+                serial = str(user_input[CONF_SERIAL]).strip()
                 await self.async_set_unique_id(host)
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
@@ -69,15 +74,17 @@ class TendaMW6ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_HOST: host,
                         CONF_PORT: int(user_input[CONF_PORT]),
-                        CONF_LOGIN_ACCOUNT: account,
+                        CONF_SERIAL: serial,
                     },
                 )
 
         schema = vol.Schema(
             {
+                # IP of the master node (the one exposing TCP port 9000).
                 vol.Required(CONF_HOST, default="192.168.0.1"): str,
                 vol.Required(CONF_PORT, default=9000): vol.Coerce(int),
-                vol.Required(CONF_LOGIN_ACCOUNT): str,
+                # Serial number of a node (under the unit / in its QR code).
+                vol.Required(CONF_SERIAL): str,
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
@@ -109,8 +116,8 @@ def _render_current_device_map(
         return saved_raw
 
     lines = [
-        "# IP | MAC = Nazwa",
-        "# Pusta nazwa po znaku = wymusza wyświetlanie adresu IP.",
+        "# IP | MAC = name",
+        "# An empty name after the = sign forces the IP to be displayed.",
     ]
     used_keys: set[str] = set()
 
