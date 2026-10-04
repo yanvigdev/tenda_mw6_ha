@@ -56,6 +56,17 @@
       "transfer_unit": {
         "name": "Transfer display unit"
       }
+    },
+    "sensor": {
+      "node_online": {
+        "name": "Connected clients"
+      },
+      "node_wifi": {
+        "name": "Wi-Fi clients"
+      },
+      "node_weakest_signal": {
+        "name": "Weakest signal"
+      }
     }
   }
 }

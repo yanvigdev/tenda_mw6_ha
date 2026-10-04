@@ -56,6 +56,17 @@
       "transfer_unit": {
         "name": "Unité d'affichage du transfert"
       }
+    },
+    "sensor": {
+      "node_online": {
+        "name": "Clients connectés"
+      },
+      "node_wifi": {
+        "name": "Clients Wi-Fi"
+      },
+      "node_weakest_signal": {
+        "name": "Signal le plus faible"
+      }
     }
   }
 }
