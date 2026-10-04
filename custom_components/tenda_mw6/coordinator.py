@@ -11,9 +11,11 @@ from .api import (
     TendaMW6Client,
     TendaMW6Error,
     TendaMW6InventorySummary,
+    TendaMW6NodeSummary,
     TendaMW6Qos,
     TendaMW6TransferReadiness,
     summarize_inventory,
+    summarize_nodes,
     summarize_transfer_readiness,
 )
 
@@ -72,6 +74,11 @@ class TendaMW6Coordinator(DataUpdateCoordinator[list[TendaMW6Client]]):
     def inventory_summary(self) -> TendaMW6InventorySummary:
         """Return the current HostList online-state summary."""
         return summarize_inventory(self.data or [])
+
+    @property
+    def node_summaries(self) -> dict[str, TendaMW6NodeSummary]:
+        """Return the per-node summary of the last HostList, keyed by node serial."""
+        return summarize_nodes(self.data or [])
 
     @property
     def transfer_readiness(self) -> TendaMW6TransferReadiness:
