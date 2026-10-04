@@ -266,6 +266,265 @@ function mw6tSignalLevel(client, weakThreshold) {
   return "medium";
 }
 
+/** Visible labels per language; the card follows hass.language and falls back to English. */
+const MW6T_I18N = {
+  en: {
+    title: "Mesh Wi-Fi topology",
+    showOffline: "Offline",
+    weakOnly: "Weak signal only",
+    online: "online",
+    orphans: "No node",
+    empty: "No device",
+    noNodes: "No Tenda MW6 node found. Restart Home Assistant after updating the integration.",
+  },
+  fr: {
+    title: "Topologie du mesh Wi-Fi",
+    showOffline: "Hors ligne",
+    weakOnly: "Signal faible seulement",
+    online: "en ligne",
+    orphans: "Sans borne",
+    empty: "Aucun appareil",
+    noNodes: "Aucune borne trouvée. Redémarrez Home Assistant après la mise à jour de l'intégration.",
+  },
+  pl: {
+    title: "Topologia sieci mesh",
+    showOffline: "Offline",
+    weakOnly: "Tylko słaby sygnał",
+    online: "online",
+    orphans: "Bez węzła",
+    empty: "Brak urządzeń",
+    noNodes: "Nie znaleziono węzłów Tenda MW6. Uruchom ponownie Home Assistant po aktualizacji integracji.",
+  },
+};
+
+/** localStorage key of the per-browser toggle state. */
+const MW6T_STORAGE_KEY = "tenda-mw6-topology-card:settings";
+
+/**
+ * Read the toggle state saved in this browser.
+ * Storage may be blocked (private mode, previews): defaults are returned then.
+ * @returns {{showOffline: boolean, weakOnly: boolean}}
+ */
+function mw6tLoadSettings() {
+  const settings = { showOffline: false, weakOnly: false };
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(MW6T_STORAGE_KEY) || "{}");
+    settings.showOffline = parsed.showOffline === true;
+    settings.weakOnly = parsed.weakOnly === true;
+  } catch (_) {
+    // Storage unavailable or corrupted: keep the defaults.
+  }
+  return settings;
+}
+
+/**
+ * Save the toggle state in this browser; failures are ignored (the card still works).
+ * @param {{showOffline: boolean, weakOnly: boolean}} settings
+ */
+function mw6tSaveSettings(settings) {
+  try {
+    window.localStorage.setItem(MW6T_STORAGE_KEY, JSON.stringify(settings));
+  } catch (_) {
+    // Storage unavailable: the choice simply is not remembered.
+  }
+}
+
+const MW6T_STYLES = [
+  ":host { display:block; }",
+  "ha-card { padding:16px; box-sizing:border-box; }",
+  ".header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }",
+  ".title { display:flex; align-items:center; gap:8px; font-size:1.1rem; font-weight:600; color:var(--primary-text-color); }",
+  ".title ha-icon { color:var(--primary-color); }",
+  ".toggles { display:flex; gap:14px; flex-wrap:wrap; font-size:.8rem; color:var(--secondary-text-color); }",
+  ".toggles label { display:flex; align-items:center; gap:4px; cursor:pointer; }",
+  ".grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }",
+  ".column { min-width:0; padding:10px; border:1px solid var(--divider-color); border-radius:12px; }",
+  ".node { margin-bottom:8px; }",
+  ".node[data-entity] { cursor:pointer; }",
+  ".node-name { font-weight:600; color:var(--primary-text-color); }",
+  ".area, .count, .none, .empty { font-size:.75rem; color:var(--secondary-text-color); }",
+  ".client { display:grid; grid-template-columns:10px minmax(0,1fr) auto; column-gap:8px; align-items:center; padding:4px 0; font-size:.85rem; color:var(--primary-text-color); }",
+  ".client[data-entity] { cursor:pointer; }",
+  ".client.offline { opacity:.5; }",
+  ".client .dot { grid-row:1 / span 2; }",
+  ".client .name { grid-column:2; grid-row:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }",
+  ".client .ip { grid-column:2; grid-row:2; font-size:.7rem; color:var(--secondary-text-color); }",
+  ".client .sig { grid-column:3; grid-row:1 / span 2; font-size:.75rem; color:var(--secondary-text-color); }",
+  ".client ha-icon { --mdc-icon-size:16px; }",
+  ".dot { width:10px; height:10px; border-radius:50%; background:var(--disabled-text-color,#9e9e9e); }",
+  ".dot.good { background:var(--success-color,#2e7d32); }",
+  ".dot.medium { background:var(--warning-color,#f9a825); }",
+  ".dot.weak { background:var(--error-color,#c62828); }",
+  ".dot.wired { background:var(--primary-color); }",
+].join("\n");
+
+/**
+ * Lovelace custom element rendering the mesh topology.
+ * Rendering is skipped when a hass update does not change the computed topology.
+ */
+class TendaMW6TopologyCard extends HTMLElement {
+  constructor() {
+    super();
+    this._config = {};
+    this._hass = null;
+    this._signature = null;
+    this._settings = mw6tLoadSettings();
+    this.attachShadow({ mode: "open" });
+  }
+
+  /** Default configuration used by the card picker: everything is optional. */
+  static getStubConfig() {
+    return {};
+  }
+
+  /**
+   * @param {{title?: string, entry_id?: string, weak_signal_threshold?: number}} config
+   */
+  setConfig(config) {
+    this._config = Object.assign({}, config || {});
+    this._signature = null;
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    // Re-render only when what is displayed changes (names, areas, states, language).
+    const signature = this._lang() + JSON.stringify(this._topology());
+    if (signature === this._signature) return;
+    this._signature = signature;
+    this._render();
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  getGridOptions() {
+    return { columns: "full", min_rows: 4 };
+  }
+
+  /** Two-letter language supported by the card, from hass.language; "en" otherwise. */
+  _lang() {
+    const language = String((this._hass && this._hass.language) || "en").toLowerCase().split("-")[0];
+    return MW6T_I18N[language] ? language : "en";
+  }
+
+  /** Translated label, falling back to English then to the key itself. */
+  _t(key) {
+    return MW6T_I18N[this._lang()][key] || MW6T_I18N.en[key] || key;
+  }
+
+  /** Weak-signal threshold from the YAML, or the default when missing or not a number. */
+  _weakThreshold() {
+    const value = mw6tNumber(this._config.weak_signal_threshold);
+    return value === null ? MW6T_DEFAULT_WEAK : value;
+  }
+
+  _topology() {
+    const hass = this._hass || {};
+    return mw6tBuildTopology(hass.states, hass.entities, hass.devices, hass.areas, {
+      showOffline: this._settings.showOffline,
+      weakOnly: this._settings.weakOnly,
+      weakThreshold: this._weakThreshold(),
+      entryId: this._config.entry_id || null,
+    });
+  }
+
+  _togglesHtml() {
+    return '<div class="toggles">' + ["showOffline", "weakOnly"].map(function (key) {
+      return '<label><input type="checkbox" data-setting="' + key + '"' +
+        (this._settings[key] ? " checked" : "") + "> " + mw6tEscape(this._t(key)) + "</label>";
+    }, this).join("") + "</div>";
+  }
+
+  _clientHtml(client, threshold) {
+    const level = mw6tSignalLevel(client, threshold);
+    let value = "—";
+    if (level === "wired") value = '<ha-icon icon="mdi:ethernet"></ha-icon>';
+    else if (client.signal !== null) value = mw6tEscape(client.signal + " dBm");
+    return '<div class="client' + (client.online === true ? "" : " offline") + '"' +
+      (client.entityId ? ' data-entity="' + mw6tEscape(client.entityId) + '"' : "") + ">" +
+      '<span class="dot ' + level + '"></span>' +
+      '<span class="name">' + mw6tEscape(client.name) + "</span>" +
+      '<span class="ip">' + mw6tEscape(client.ip) + "</span>" +
+      '<span class="sig">' + value + "</span></div>";
+  }
+
+  /** One column: a node, or the "No node" group (no entityId, no area). */
+  _columnHtml(column, threshold) {
+    const head = '<div class="node"' +
+      (column.entityId ? ' data-entity="' + mw6tEscape(column.entityId) + '"' : "") + ">" +
+      '<div class="node-name">' + mw6tEscape(column.name) + "</div>" +
+      (column.area ? '<div class="area">' + mw6tEscape(column.area) + "</div>" : "") +
+      '<div class="count">' + column.online + "/" + column.total + " " + mw6tEscape(this._t("online")) + "</div></div>";
+    const rows = column.clients.length
+      ? column.clients.map(function (client) { return this._clientHtml(client, threshold); }, this).join("")
+      : '<div class="none">' + mw6tEscape(this._t("empty")) + "</div>";
+    return '<div class="column">' + head + rows + "</div>";
+  }
+
+  /** Full card markup; pure function of config, hass and settings (tested in Node). */
+  _html() {
+    const topology = this._topology();
+    const threshold = this._weakThreshold();
+    const columns = topology.nodes.map(function (node) { return this._columnHtml(node, threshold); }, this);
+    if (topology.orphans.length) {
+      columns.push(this._columnHtml({
+        name: this._t("orphans"),
+        area: "",
+        entityId: null,
+        online: topology.orphans.filter(function (client) { return client.online === true; }).length,
+        total: topology.orphans.length,
+        clients: topology.orphans,
+      }, threshold));
+    }
+    const body = columns.length
+      ? '<div class="grid">' + columns.join("") + "</div>"
+      : '<div class="empty">' + mw6tEscape(this._t("noNodes")) + "</div>";
+    return "<style>" + MW6T_STYLES + "</style><ha-card>" +
+      '<div class="header"><div class="title"><ha-icon icon="mdi:access-point-network"></ha-icon>' +
+      mw6tEscape(this._config.title || this._t("title")) + "</div>" + this._togglesHtml() + "</div>" +
+      body + "</ha-card>";
+  }
+
+  /** Write the markup and bind the toggles and more-info clicks. */
+  _render() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.innerHTML = this._html();
+    this.shadowRoot.querySelectorAll("input[data-setting]").forEach(function (input) {
+      input.addEventListener("change", function () {
+        this._settings[input.dataset.setting] = input.checked;
+        mw6tSaveSettings(this._settings);
+        this._signature = null;
+        this._render();
+      }.bind(this));
+    }, this);
+    this.shadowRoot.querySelectorAll("[data-entity]").forEach(function (element) {
+      element.addEventListener("click", function () {
+        this.dispatchEvent(new CustomEvent("hass-more-info", {
+          detail: { entityId: element.dataset.entity },
+          bubbles: true,
+          composed: true,
+        }));
+      }.bind(this));
+    }, this);
+  }
+}
+
+if (!customElements.get("tenda-mw6-topology-card")) {
+  customElements.define("tenda-mw6-topology-card", TendaMW6TopologyCard);
+}
+
+window.customCards = window.customCards || [];
+if (!window.customCards.some(function (card) { return card.type === "tenda-mw6-topology-card"; })) {
+  window.customCards.push({
+    type: "tenda-mw6-topology-card",
+    name: "Tenda MW6 Topology Card",
+    description: "One column per mesh node with its clients and their signal (v" + MW6T_CARD_VERSION + ").",
+    preview: true,
+  });
+}
+
 // Export the pure model to Node tests; in the browser `module` does not exist.
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {

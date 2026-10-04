@@ -129,4 +129,59 @@ assert.equal(model.mw6tSignalLevel({ signal: -70 }, -70), "weak");
 // Escaping.
 assert.equal(model.mw6tEscape("<a href='x'>&\""), "&lt;a href=&#039;x&#039;&gt;&amp;&quot;");
 
-console.log("Tenda MW6 topology model tests passed");
+// ---- Rendering (Phase 10) ----
+const Card = registry.get("tenda-mw6-topology-card");
+assert.ok(Card, "custom element registered");
+assert.ok(window.customCards.some((card) => card.type === "tenda-mw6-topology-card"));
+assert.deepEqual(Card.getStubConfig(), {});
+
+/** Card instance without constructor (no shadow DOM in Node), as in test_card.js. */
+function makeCard(config, hass, settings) {
+  const card = Object.create(Card.prototype);
+  card._config = config || {};
+  card._hass = hass;
+  card._settings = Object.assign({ showOffline: false, weakOnly: false }, settings || {});
+  return card;
+}
+
+const hass = { language: "fr", states, entities, devices, areas };
+let html = makeCard({ entry_id: "entry" }, hass)._html();
+assert.match(html, /Topologie du mesh Wi-Fi/);
+assert.match(html, /Living room node/);
+assert.match(html, /Salon/);
+assert.match(html, /3\/3 en ligne/);
+assert.match(html, /Sans borne/);
+assert.match(html, /data-entity="sensor\.salon_node_online"/);
+assert.match(html, /data-entity="binary_sensor\.phone_online"/);
+assert.match(html, /class="dot weak"/);
+assert.match(html, /mdi:ethernet/);
+assert.match(html, /-45 dBm/);
+
+// Custom title and settings reflected in the toggles.
+html = makeCard({ entry_id: "entry", title: "Maison" }, hass, { weakOnly: true })._html();
+assert.match(html, /Maison/);
+assert.match(html, /data-setting="weakOnly" checked/);
+assert.doesNotMatch(html, /Phone/);
+
+// A hostile DHCP name is rendered as text, never as markup.
+const hostile = Object.assign({}, states, clientStates(
+  "evil", "02:00:00:00:00:09", "<img src=x onerror=alert(1)>", "192.0.2.99", "SN0001", true, -50
+));
+html = makeCard({ entry_id: "entry" }, Object.assign({}, hass, { states: hostile }))._html();
+assert.doesNotMatch(html, /<img src=x/);
+assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+
+// Invalid threshold falls back to the default; a valid one is used as-is.
+assert.equal(makeCard({ weak_signal_threshold: "abc" }, hass)._weakThreshold(), -70);
+assert.equal(makeCard({ weak_signal_threshold: -65 }, hass)._weakThreshold(), -65);
+
+// Empty state message.
+html = makeCard({}, { language: "en", states: {} })._html();
+assert.match(html, /No Tenda MW6 node found/);
+
+// Localization with English fallback.
+assert.equal(makeCard({}, { language: "pl-PL" })._t("orphans"), "Bez węzła");
+assert.equal(makeCard({}, { language: "de" })._t("orphans"), "No node");
+assert.equal(makeCard({}, null)._lang(), "en");
+
+console.log("Tenda MW6 topology card tests passed");
