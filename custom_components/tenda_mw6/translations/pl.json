@@ -55,6 +55,17 @@
       "transfer_unit": {
         "name": "Jednostka transferu"
       }
+    },
+    "sensor": {
+      "node_online": {
+        "name": "Podłączeni klienci"
+      },
+      "node_wifi": {
+        "name": "Klienci Wi-Fi"
+      },
+      "node_weakest_signal": {
+        "name": "Najsłabszy sygnał"
+      }
     }
   }
 }

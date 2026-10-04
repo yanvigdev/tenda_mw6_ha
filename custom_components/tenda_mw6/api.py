@@ -92,6 +92,71 @@ def summarize_inventory(clients: list[TendaMW6Client]) -> TendaMW6InventorySumma
 
 
 @dataclass(frozen=True, slots=True)
+class TendaMW6NodeSummary:
+    """Per-node view of the HostList, derived only from the client list.
+
+    Nothing here is read from the node itself: the MW6 protocol command that would
+    describe a node is not confirmed read-only, so node state is inferred from the
+    clients it carries.
+
+    Attributes:
+        node_sn: Node serial number, as reported in each client's ``node_sn``.
+        total_clients: Every client listed on this node, online or not.
+        online_clients: Clients whose online flag is set (not 0, not missing).
+        wifi_clients: Online clients that report a signal (wired ones do not).
+        weakest_signal: Lowest signal (dBm) among online Wi-Fi clients, or None.
+        weakest_client_mac: MAC of the client with ``weakest_signal``, or None.
+    """
+
+    node_sn: str
+    total_clients: int
+    online_clients: int
+    wifi_clients: int
+    weakest_signal: int | None
+    weakest_client_mac: str | None
+
+
+def summarize_nodes(clients: list[TendaMW6Client]) -> dict[str, TendaMW6NodeSummary]:
+    """Group clients by the mesh node that carries them.
+
+    Clients with an empty ``node_sn`` (long-offline history entries) are skipped,
+    so no summary is ever produced for an unknown node.
+
+    Example:
+        >>> summaries = summarize_nodes(clients)
+        >>> summaries["E00000000000000001"].online_clients
+        6
+
+    Args:
+        clients: Client list decoded from MESH_HOSTS_GET.
+
+    Returns:
+        One summary per node serial number, keyed by that serial as reported.
+    """
+    groups: dict[str, list[TendaMW6Client]] = {}
+    for client in clients:
+        if client.node_sn:
+            groups.setdefault(client.node_sn, []).append(client)
+
+    summaries: dict[str, TendaMW6NodeSummary] = {}
+    for node_sn, members in groups.items():
+        # Same online rule as summarize_inventory: only an explicit non-zero flag counts.
+        online = [client for client in members if client.raw_online not in (None, 0)]
+        # A missing signal means a wired client; it must not define the weakest signal.
+        wifi = [client for client in online if client.signal is not None]
+        weakest = min(wifi, key=lambda client: client.signal) if wifi else None
+        summaries[node_sn] = TendaMW6NodeSummary(
+            node_sn=node_sn,
+            total_clients=len(members),
+            online_clients=len(online),
+            wifi_clients=len(wifi),
+            weakest_signal=weakest.signal if weakest is not None else None,
+            weakest_client_mac=weakest.mac if weakest is not None else None,
+        )
+    return summaries
+
+
+@dataclass(frozen=True, slots=True)
 class TendaMW6TransferReadiness:
     """Whether the current HostList can safely drive local transfer counters."""
 

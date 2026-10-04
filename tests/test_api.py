@@ -108,5 +108,53 @@ class InventorySummaryTest(unittest.TestCase):
         self.assertFalse(readiness.inventory_all_reported_offline)
 
 
+class NodeSummaryTest(unittest.TestCase):
+    """summarize_nodes groups the HostList per mesh node without querying nodes."""
+
+    def client(
+        self,
+        mac: str,
+        node_sn: str,
+        raw_online: int | None,
+        signal: int | None,
+    ) -> object:
+        return API.TendaMW6Client(
+            ip="", mac=mac, name="", node_sn=node_sn, signal=signal, access=None,
+            condition_time=None, raw_online=raw_online, raw_uprate=None,
+            raw_downrate=None,
+        )
+
+    def test_groups_and_counts_per_node(self) -> None:
+        summaries = API.summarize_nodes([
+            self.client("aa", "SN1", 1, -45),
+            self.client("bb", "SN1", 1, -72),
+            self.client("cc", "SN1", 1, None),   # wired
+            self.client("dd", "SN1", 0, -30),    # offline
+            self.client("ee", "SN2", 1, -50),
+        ])
+        self.assertEqual(set(summaries), {"SN1", "SN2"})
+        node = summaries["SN1"]
+        self.assertEqual(node.total_clients, 4)
+        self.assertEqual(node.online_clients, 3)
+        self.assertEqual(node.wifi_clients, 2)
+        self.assertEqual(node.weakest_signal, -72)
+        self.assertEqual(node.weakest_client_mac, "bb")
+
+    def test_offline_and_wired_clients_never_define_weakest_signal(self) -> None:
+        summaries = API.summarize_nodes([
+            self.client("aa", "SN1", 0, -90),
+            self.client("bb", "SN1", 1, None),
+        ])
+        self.assertIsNone(summaries["SN1"].weakest_signal)
+        self.assertIsNone(summaries["SN1"].weakest_client_mac)
+        self.assertEqual(summaries["SN1"].wifi_clients, 0)
+
+    def test_clients_without_node_are_ignored(self) -> None:
+        self.assertEqual(API.summarize_nodes([self.client("aa", "", 1, -40)]), {})
+
+    def test_empty_list(self) -> None:
+        self.assertEqual(API.summarize_nodes([]), {})
+
+
 if __name__ == "__main__":
     unittest.main()

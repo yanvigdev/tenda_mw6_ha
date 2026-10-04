@@ -80,6 +80,34 @@ then reload the frontend (Ctrl+Shift+R). Add the card via "Add card" →
 type: custom:tenda-mw6-card
 ```
 
+## The topology card
+
+Each mesh node is exposed as a Home Assistant device ("Tenda MW6 node …1234") with
+three sensors: connected clients, Wi-Fi clients and weakest signal. They are computed
+from the client list only; no extra command is sent to the nodes. Rename each node and
+assign it an area from **Settings → Devices & services → Devices**: the card uses that
+name and area.
+
+A node is discovered through its clients: a node that never carried a client does not
+appear until it does.
+
+```yaml
+type: custom:tenda-mw6-topology-card
+title: Mesh Wi-Fi            # optional
+entry_id: abc123             # optional, when several meshes are configured
+weak_signal_threshold: -70   # optional, dBm
+```
+
+The card shows one column per node (sorted by area, then name) with its clients: green
+dot at -60 dBm or better, orange below, red at or below the threshold, network icon for
+wired clients. "Offline" and "Weak signal only" toggles are remembered per browser.
+Clients whose node is unknown are grouped under "No node". Click a client or a node to
+open its details.
+
+If the card is reported as "Custom element not found: tenda-mw6-topology-card", declare
+it as a Lovelace resource: URL `/tenda_mw6/tenda-mw6-topology-card.js?v=1`, type
+**JavaScript Module**.
+
 ## Exposed entities
 
 Per client device: online state, Wi-Fi signal, up/down rate, accumulated
@@ -91,6 +119,10 @@ aggregate transfers, and — as diagnostics — the **global QoS caps**
 (`QoS upload cap` / `QoS download cap`, read-only `QOS_GET`; raw values, unit
 unconfirmed).
 
+Per mesh node (one device per node): connected clients (with the total in
+attributes), Wi-Fi clients and weakest signal (with the client concerned in
+attributes), all derived from the client list.
+
 ## Architecture
 
 - `custom_components/tenda_mw6/api.py`: TCP/9000 client (read-only).
@@ -100,7 +132,8 @@ unconfirmed).
 - `config_flow.py`: input and validation (host, port, serial number).
 - `coordinator.py`: periodic polling.
 - `sensor.py` / `binary_sensor.py` / `select.py`: exposed entities.
-- `tenda-mw6-card.js`: Lovelace card.
+- `tenda-mw6-card.js`: Lovelace card (device list).
+- `tenda-mw6-topology-card.js`: Lovelace topology card (one column per node).
 
 ## Protocol (recap)
 
@@ -112,8 +145,9 @@ Frame: `24 00 07 TT 00 d5 LLLL MM CC 00 00 01 00 00 00 [payload]`
 ## Tests
 
 ```bash
-python3 -m unittest tests.test_api   # API unit tests
+python3 -m unittest tests.test_api tests.test_node_identity   # API and node id unit tests
 node tests/test_card.js              # Lovelace card logic
+node tests/test_topology_card.js     # topology card model and rendering
 ```
 
 A real integration test (serial login + client read) was validated against the

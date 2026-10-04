@@ -7,6 +7,7 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, Sen
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, UnitOfInformation
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -14,8 +15,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from . import DOMAIN
-from .api import TendaMW6Client, estimate_transfer_bytes
+from .api import TendaMW6Client, TendaMW6NodeSummary, estimate_transfer_bytes
 from .coordinator import TendaMW6Coordinator
+from .node_identity import node_device_identifier, node_sn_from_device_identifier
 
 
 async def async_setup_entry(
@@ -72,6 +74,84 @@ async def async_setup_entry(
 
     add_new_clients()
     entry.async_on_unload(coordinator.async_add_listener(add_new_clients))
+
+    known_nodes: set[str] = set()
+
+    def add_new_nodes(node_serials: list[str] | None = None) -> None:
+        """Create the device and sensors of every node serial seen for the first time.
+
+        Nodes are discovered through the clients they carry; once created, their
+        entities persist even if the node later carries no client.
+
+        Args:
+            node_serials: Serials to consider; defaults to the nodes of the last poll
+                (the coordinator listener calls this without arguments).
+        """
+        entities: list[SensorEntity] = []
+        serials = node_serials if node_serials is not None else list(coordinator.node_summaries)
+        for node_sn in serials:
+            if node_sn in known_nodes:
+                continue
+            known_nodes.add(node_sn)
+            _link_node_device_to_hub(hass, entry, node_sn)
+            entities.extend(
+                (
+                    TendaMW6NodeOnlineClientsSensor(coordinator, entry, node_sn),
+                    TendaMW6NodeWifiClientsSensor(coordinator, entry, node_sn),
+                    TendaMW6NodeWeakestSignalSensor(coordinator, entry, node_sn),
+                )
+            )
+
+        if entities:
+            async_add_entities(entities)
+
+    # Recreate the nodes already known to the device registry first: a node that
+    # carries no client at startup must keep its entities (and its card column).
+    add_new_nodes(_registered_node_serials(hass, entry) + list(coordinator.node_summaries))
+    entry.async_on_unload(coordinator.async_add_listener(add_new_nodes))
+
+
+def _link_node_device_to_hub(hass: HomeAssistant, entry: ConfigEntry, node_sn: str) -> None:
+    """Register the node device under the mesh hub device.
+
+    ``DeviceInfo.via_device`` is deprecated (HA 2026.x, removed in 2027.8): the parent
+    link must be set with ``via_device_id`` on the device registry. The hub device is
+    created here if its sensors are not registered yet, with the same identifier and
+    metadata as the hub ``DeviceInfo`` of the aggregate sensors.
+    """
+    registry = dr.async_get(hass)
+    hub = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="Tenda MW6",
+        manufacturer="Tenda",
+        model="Nova MW6",
+    )
+    registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, node_device_identifier(entry.entry_id, node_sn))},
+        via_device_id=hub.id,
+    )
+
+
+def _registered_node_serials(hass: HomeAssistant, entry: ConfigEntry) -> list[str]:
+    """Return the serials of the node devices already registered for this entry.
+
+    The serial is read back from the device identifier, which keeps its original
+    case (entity unique ids are lower-cased and cannot be used for this).
+    """
+    registry = dr.async_get(hass)
+    serials: list[str] = []
+    for device in dr.async_entries_for_config_entry(registry, entry.entry_id):
+        for domain, identifier in device.identifiers:
+            node_sn = (
+                node_sn_from_device_identifier(entry.entry_id, identifier)
+                if domain == DOMAIN
+                else None
+            )
+            if node_sn:
+                serials.append(node_sn)
+    return serials
 
 
 class TendaMW6InventoryHealthSensor(CoordinatorEntity[TendaMW6Coordinator], SensorEntity):
@@ -746,3 +826,125 @@ class TendaMW6ClientNodeSensor(TendaMW6ClientSensorBase):
     def native_value(self) -> str | None:
         client = self._client
         return client.node_sn or None if client is not None else None
+
+
+class TendaMW6NodeSensorBase(CoordinatorEntity[TendaMW6Coordinator], SensorEntity):
+    """Base for sensors attached to one mesh node device.
+
+    Each node gets its own Home Assistant device so the user can rename it and
+    assign it an area with the standard UI (stored by HA as ``name_by_user`` and
+    ``area_id``, never overwritten here). Subclasses set ``_metric``, which is both
+    the translation key and the ``tenda_mw6_metric`` attribute read by the card.
+    """
+
+    _attr_has_entity_name = True
+    _metric: str = ""
+
+    def __init__(
+        self,
+        coordinator: TendaMW6Coordinator,
+        entry: ConfigEntry,
+        node_sn: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._node_sn = node_sn
+        self._attr_unique_id = f"{entry.entry_id}_node_{node_sn.lower()}_{self._metric}"
+        self._attr_translation_key = self._metric
+
+    @property
+    def _summary(self) -> TendaMW6NodeSummary | None:
+        """Summary of this node in the last poll, or None if it carries no client now."""
+        return self.coordinator.node_summaries.get(self._node_sn)
+
+    @property
+    def node_identity_attributes(self) -> dict[str, str | bool]:
+        """Stable metadata used by the topology card to discover nodes."""
+        return {
+            "tenda_mw6_node": True,
+            "tenda_mw6_metric": self._metric,
+            "node_sn": self._node_sn,
+            "config_entry_id": self._entry.entry_id,
+        }
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self.node_identity_attributes
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, node_device_identifier(self._entry.entry_id, self._node_sn))},
+            # Default name only: a name set by the user in HA takes precedence.
+            name=f"Tenda MW6 node …{self._node_sn[-4:]}",
+            manufacturer="Tenda",
+            model="Nova MW6 node",
+            serial_number=self._node_sn,
+            # The link to the hub is set on the device registry by
+            # _link_node_device_to_hub (DeviceInfo.via_device is deprecated).
+        )
+
+
+class TendaMW6NodeOnlineClientsSensor(TendaMW6NodeSensorBase):
+    """Number of online clients (Wi-Fi and wired) carried by one node."""
+
+    _metric = "node_online"
+    _attr_icon = "mdi:devices"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int:
+        summary = self._summary
+        return summary.online_clients if summary is not None else 0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        summary = self._summary
+        return {
+            **self.node_identity_attributes,
+            "total_clients": summary.total_clients if summary is not None else 0,
+        }
+
+
+class TendaMW6NodeWifiClientsSensor(TendaMW6NodeSensorBase):
+    """Number of online Wi-Fi clients (those reporting a signal) on one node."""
+
+    _metric = "node_wifi"
+    _attr_icon = "mdi:wifi"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int:
+        summary = self._summary
+        return summary.wifi_clients if summary is not None else 0
+
+
+class TendaMW6NodeWeakestSignalSensor(TendaMW6NodeSensorBase):
+    """Weakest signal among the online Wi-Fi clients of one node, in dBm."""
+
+    _metric = "node_weakest_signal"
+    _attr_icon = "mdi:wifi-strength-1-alert"
+    _attr_native_unit_of_measurement = "dBm"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int | None:
+        summary = self._summary
+        return summary.weakest_signal if summary is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        summary = self._summary
+        mac = summary.weakest_client_mac if summary is not None else None
+        # Resolve the display name (alias or DHCP name) of the weakest client.
+        client = next(
+            (item for item in self.coordinator.data or [] if mac and item.mac == mac),
+            None,
+        )
+        return {
+            **self.node_identity_attributes,
+            "weakest_client_mac": mac.lower() if mac else None,
+            "weakest_client_name": (
+                self.coordinator.client_display_name(client) if client is not None else None
+            ),
+        }
