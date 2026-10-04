@@ -93,6 +93,7 @@ async def async_setup_entry(
             if node_sn in known_nodes:
                 continue
             known_nodes.add(node_sn)
+            _link_node_device_to_hub(hass, entry, node_sn)
             entities.extend(
                 (
                     TendaMW6NodeOnlineClientsSensor(coordinator, entry, node_sn),
@@ -108,6 +109,29 @@ async def async_setup_entry(
     # carries no client at startup must keep its entities (and its card column).
     add_new_nodes(_registered_node_serials(hass, entry) + list(coordinator.node_summaries))
     entry.async_on_unload(coordinator.async_add_listener(add_new_nodes))
+
+
+def _link_node_device_to_hub(hass: HomeAssistant, entry: ConfigEntry, node_sn: str) -> None:
+    """Register the node device under the mesh hub device.
+
+    ``DeviceInfo.via_device`` is deprecated (HA 2026.x, removed in 2027.8): the parent
+    link must be set with ``via_device_id`` on the device registry. The hub device is
+    created here if its sensors are not registered yet, with the same identifier and
+    metadata as the hub ``DeviceInfo`` of the aggregate sensors.
+    """
+    registry = dr.async_get(hass)
+    hub = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="Tenda MW6",
+        manufacturer="Tenda",
+        model="Nova MW6",
+    )
+    registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, node_device_identifier(entry.entry_id, node_sn))},
+        via_device_id=hub.id,
+    )
 
 
 def _registered_node_serials(hass: HomeAssistant, entry: ConfigEntry) -> list[str]:
@@ -856,7 +880,8 @@ class TendaMW6NodeSensorBase(CoordinatorEntity[TendaMW6Coordinator], SensorEntit
             manufacturer="Tenda",
             model="Nova MW6 node",
             serial_number=self._node_sn,
-            via_device=(DOMAIN, self._entry.entry_id),
+            # The link to the hub is set on the device registry by
+            # _link_node_device_to_hub (DeviceInfo.via_device is deprecated).
         )
 
 

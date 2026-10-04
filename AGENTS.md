@@ -24,7 +24,8 @@ Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
     `__init__.py` (`FRONTEND_FILES`).
   - Node devices: `api.summarize_nodes()` → `coordinator.node_summaries` →
     `sensor.py` `TendaMW6Node*Sensor` (device id `(DOMAIN, f"{entry_id}:node:{sn}")`
-    built by `node_identity.py`, `via_device` = hub). Derived from the client list
+    built by `node_identity.py`; parent hub set with `via_device_id` on the
+    device registry, since `DeviceInfo.via_device` is deprecated). Derived from the client list
     only. At setup, node devices already in the registry are recreated first, so a
     node without clients keeps its entities across restarts.
   - `translations/`: `en.json`, `fr.json`, `pl.json`; `strings.json` = English
