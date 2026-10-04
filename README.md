@@ -148,7 +148,12 @@ Frame: `24 00 07 TT 00 d5 LLLL MM CC 00 00 01 00 00 00 [payload]`
 python3 -m unittest tests.test_api tests.test_node_identity   # API and node id unit tests
 node tests/test_card.js              # Lovelace card logic
 node tests/test_topology_card.js     # topology card model and rendering
+python3 -m doctest custom_components/tenda_mw6/api.py custom_components/tenda_mw6/node_identity.py
 ```
+
+GitHub Actions runs these checks on every push and pull request
+(`.github/workflows/python-smoke.yml`), plus a HACS validation
+(`validate-hacs.yml`).
 
 A real integration test (serial login + client read) was validated against the
 local master node.

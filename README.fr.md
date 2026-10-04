@@ -151,7 +151,12 @@ commande `0x00` (`MESH_HOSTS_GET`).
 python3 -m unittest tests.test_api tests.test_node_identity   # tests unitaires API et identifiants de borne
 node tests/test_card.js              # logique de la carte Lovelace
 node tests/test_topology_card.js     # modèle et rendu de la carte topologie
+python3 -m doctest custom_components/tenda_mw6/api.py custom_components/tenda_mw6/node_identity.py
 ```
+
+GitHub Actions lance ces vérifications à chaque push et pull request
+(`.github/workflows/python-smoke.yml`), ainsi qu'une validation HACS
+(`validate-hacs.yml`).
 
 Un test d'intégration réel (login par SN + lecture des clients) a été validé
 contre le nœud maître local.

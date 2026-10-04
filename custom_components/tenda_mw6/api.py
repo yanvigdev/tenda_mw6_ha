@@ -123,9 +123,22 @@ def summarize_nodes(clients: list[TendaMW6Client]) -> dict[str, TendaMW6NodeSumm
     so no summary is ever produced for an unknown node.
 
     Example:
-        >>> summaries = summarize_nodes(clients)
-        >>> summaries["E00000000000000001"].online_clients
-        6
+        >>> def client(mac, node_sn, online, signal):
+        ...     return TendaMW6Client(
+        ...         ip="", mac=mac, name="", node_sn=node_sn, signal=signal,
+        ...         access=None, condition_time=None, raw_online=online,
+        ...         raw_uprate=None, raw_downrate=None,
+        ...     )
+        >>> summaries = summarize_nodes([
+        ...     client("aa", "E00000000000000001", 1, -45),
+        ...     client("bb", "E00000000000000001", 1, None),  # wired
+        ...     client("cc", "", 1, -50),                      # no node: skipped
+        ... ])
+        >>> list(summaries)
+        ['E00000000000000001']
+        >>> node = summaries["E00000000000000001"]
+        >>> (node.online_clients, node.wifi_clients, node.weakest_signal)
+        (2, 1, -45)
 
     Args:
         clients: Client list decoded from MESH_HOSTS_GET.

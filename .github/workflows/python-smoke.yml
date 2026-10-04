@@ -7,6 +7,7 @@ on:
       - "custom_components/**/*.py"
       - "custom_components/**/*.js"
       - "tests/**/*.py"
+      - "tests/**/*.js"
       - ".github/workflows/python-smoke.yml"
   pull_request:
     paths:
@@ -14,6 +15,7 @@ on:
       - "custom_components/**/*.py"
       - "custom_components/**/*.js"
       - "tests/**/*.py"
+      - "tests/**/*.js"
       - ".github/workflows/python-smoke.yml"
 
 jobs:
@@ -26,11 +28,17 @@ jobs:
           python-version: "3.12"
       - name: Compile project Python
         run: python -m compileall -q tools custom_components tests
-      - name: Check bundled Lovelace card
-        run: node --check custom_components/tenda_mw6/tenda-mw6-card.js
+      - name: Check bundled Lovelace cards
+        run: |
+          node --check custom_components/tenda_mw6/tenda-mw6-card.js
+          node --check custom_components/tenda_mw6/tenda-mw6-topology-card.js
       - name: Test Lovelace card logic
-        run: node tests/test_card.js
+        run: |
+          node tests/test_card.js
+          node tests/test_topology_card.js
       - name: Run MW6 protocol tests
         run: python -m unittest discover -s tests -v
+      - name: Run doctests (HA-free modules)
+        run: python -m doctest -v custom_components/tenda_mw6/api.py custom_components/tenda_mw6/node_identity.py
       - name: Check MW6 probe CLI
         run: python tools/mw6_probe.py --help

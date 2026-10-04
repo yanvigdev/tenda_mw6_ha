@@ -38,12 +38,17 @@ Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
 
 ```bash
 python3 -m unittest tests.test_api                     # API tests
-python3 -m doctest custom_components/tenda_mw6/api.py  # doctests
+python3 -m doctest custom_components/tenda_mw6/api.py custom_components/tenda_mw6/node_identity.py  # doctests
 node tests/test_card.js                                # card logic
 node tests/test_topology_card.js                       # topology card
 python3 -m unittest tests.test_node_identity           # node device identifiers
 node -c custom_components/tenda_mw6/tenda-mw6-card.js  # JS syntax check
 ```
+
+CI (GitHub Actions, free on this public fork): `.github/workflows/python-smoke.yml`
+runs all of the above on every push/PR touching code or tests;
+`validate-hacs.yml` validates the HACS layout. Keep the workflow in sync when
+adding a test file or a card.
 
 ## Deployment (containerized Home Assistant)
 
