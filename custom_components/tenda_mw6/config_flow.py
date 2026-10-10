@@ -45,6 +45,9 @@ class TendaMW6ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Tenda MW6."""
 
     VERSION = 3
+    # Minor 2 (2.2.0): rate and transfer entities are disabled on upgrade, see
+    # async_migrate_entry in __init__.py.
+    MINOR_VERSION = 2
 
     @staticmethod
     @callback
