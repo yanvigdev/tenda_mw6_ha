@@ -12,9 +12,11 @@ except ImportError:  # Home Assistant < 2024.7
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .api import TendaMW6Api
 from .coordinator import TendaMW6Coordinator
+from .entity_naming import is_device_removable, is_rate_or_transfer_unique_id
 
 DOMAIN = "tenda_mw6"
 PLATFORMS: tuple[Platform, ...] = (
@@ -118,12 +120,28 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     Migration is therefore refused to force a simple reconfiguration by the user
     (entering the serial number, no capture needed).
 
-    Entries already on v3 (the current schema) are accepted as-is.
+    Entries on v3 are accepted; minor version 1 → 2 disables the rate and
+    transfer entities that are still enabled (they are created disabled since
+    2.2.0 because a bridged mesh reports no rate). Entities the user disabled
+    themselves are left untouched, and the user may re-enable any of them.
     """
-    if entry.version >= 3:
-        return True
-    # v1/v2: no conversion possible -> the user re-creates the integration.
-    return False
+    if entry.version < 3:
+        # v1/v2: no conversion possible -> the user re-creates the integration.
+        return False
+    if entry.minor_version < 2:
+        _disable_rate_and_transfer_entities(hass, entry)
+        hass.config_entries.async_update_entry(entry, minor_version=2)
+    return True
+
+
+def _disable_rate_and_transfer_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Disable (by the integration) every enabled rate/transfer entity of the entry."""
+    registry = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if entity.disabled_by is None and is_rate_or_transfer_unique_id(entity.unique_id):
+            registry.async_update_entity(
+                entity.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+            )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -147,6 +165,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload the entry after its alias options change."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: ConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Allow the user to delete a client or node device the mesh no longer reports.
+
+    The HostList keeps every client ever seen only while the mesh does; once a
+    device (a phone that left, a replaced board, a node seen as a client during
+    setup) disappears from the poll, its entities stay unavailable forever
+    unless the user removes the device from the UI, which calls this hook.
+    The hub and any client or node present in the last poll are refused.
+    """
+    coordinator: TendaMW6Coordinator = hass.data[DOMAIN][entry.entry_id]
+    current_macs = {client.mac.lower() for client in coordinator.data or []}
+    current_nodes = set(coordinator.node_summaries)
+    return all(
+        is_device_removable(entry.entry_id, identifier, current_macs, current_nodes)
+        for domain, identifier in device_entry.identifiers
+        if domain == DOMAIN
+    )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
