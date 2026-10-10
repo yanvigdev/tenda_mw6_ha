@@ -114,18 +114,57 @@ type **Module JavaScript**.
 
 ## Entités exposées
 
-Par appareil client : état en ligne, signal Wi-Fi, débit montant/descendant,
-transfert cumulé (total/jour/mois), adresse IP, nœud de rattachement et type de
-connexion (filaire/Wi-Fi).
+Par appareil client : état en ligne, signal Wi-Fi, adresse IP, nœud de
+rattachement et type de connexion (`wifi` / `wired`, capteur ENUM). Le firmware
+laisse son champ `access` vide : le type est déduit du signal — un client qui en
+rapporte un est en Wi-Fi, un client en ligne sans signal est filaire, un client
+hors ligne est inconnu.
+
+Également par client, **désactivés par défaut** : débit montant/descendant et
+transfert cumulé (total/jour/mois). Un mesh en mode pont renvoie un débit nul
+pour tous les clients, et six capteurs de transfert par client alimentant les
+statistiques long terme de zéros étaient le principal coût de l'intégration en
+base de données. Activez-les depuis les réglages de l'entité quand
+`Transfer counting health` affiche `rate_observed`.
 
 Au niveau du mesh : synthèse d'inventaire, santé du comptage de transfert,
-débits agrégés, transferts agrégés, et — en diagnostic — les **plafonds QoS
-globaux** (`QoS upload cap` / `QoS download cap`, lecture seule `QOS_GET` ;
-valeurs brutes, unité non confirmée).
+débits et transferts agrégés (désactivés par défaut, même raison), et — en
+diagnostic — les **plafonds QoS globaux** (`QoS upload cap` /
+`QoS download cap`, lecture seule `QOS_GET` ; valeurs brutes, unité non
+confirmée).
 
 Par borne du mesh (un appareil par borne) : clients connectés (total en
 attribut), clients Wi-Fi et signal le plus faible (client concerné en attribut),
 tous déduits de la liste des clients.
+
+Les identifiants des clients découverts depuis la 2.2.0 sont préfixés
+`sensor.tenda_mw6_<nom>_<mesure>` (et `binary_sensor.tenda_mw6_<nom>_online`)
+pour ne jamais entrer en collision avec les entités d'une autre intégration
+nommées d'après le même appareil (l'application compagnon crée aussi
+`sensor.<téléphone>_connection_type`). Les identifiants déjà au registre sont
+conservés.
+
+Les attributs des entités ne portent que des valeurs qui changent quand le
+client change (adresse, nom, borne, type de connexion) : une valeur réécrite à
+chaque relevé ferait écrire au recorder une ligne d'état par relevé et par entité.
+
+### Supprimer un appareil que le mesh ne rapporte plus
+
+Un client parti (un téléphone, une carte remplacée) ou une borne vue comme
+client pendant l'installation garde son appareil, avec des entités
+indisponibles. Ouvrez la fiche de l'appareil dans Home Assistant et utilisez
+**Supprimer** : l'intégration accepte la suppression de tout client ou borne
+absent du dernier relevé, et refuse le hub et les appareils présents.
+
+### Mise à niveau vers la 2.2.0
+
+Au premier démarrage, l'entrée de configuration est migrée (schéma 3.2) : les
+entités de débit et de transfert encore actives sont désactivées par
+l'intégration (celles que vous aviez désactivées vous-même ne sont pas
+touchées) ; vous pouvez en réactiver à volonté. Leurs statistiques passées ne
+sont pas effacées : utilisez `recorder.clear_statistics` (Outils de
+développement → Actions) ou les propositions de correction de la page des
+statistiques si vous voulez récupérer l'espace.
 
 ## Architecture
 
@@ -136,6 +175,9 @@ tous déduits de la liste des clients.
 - `config_flow.py` : saisie et validation (hôte, port, numéro de série).
 - `coordinator.py` : sondage périodique, toutes les 60 s (`UPDATE_INTERVAL`) ; les compteurs de transfert ignorent un écart de plus de trois périodes.
 - `sensor.py` / `binary_sensor.py` / `select.py` : entités exposées.
+- `entity_naming.py` : préfixe des identifiants, politique débit/transfert et
+  règle des appareils supprimables (Python pur, testé unitairement) ;
+  `node_identity.py` : identifiants des appareils « borne ».
 - `tenda-mw6-card.js` : carte Lovelace.
 
 ## Protocole (rappel)
