@@ -30,6 +30,10 @@ Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
     the aggregate ones are `_attr_entity_registry_enabled_default = False` (a
     bridged mesh reports 0 rates). Connection type = ENUM sensor fed by
     `api.client_connection_type()` (signal-derived; firmware `access` is empty).
+    Client Signal sensor applies `api.apply_signal_hysteresis()` with
+    `coordinator.signal_hysteresis` (option `signal_hysteresis`, default 2, 0..10,
+    read by `__init__.signal_hysteresis_option()`; edited in the options flow next to
+    `device_aliases`). Node sensors use raw values.
     **Rule:** never put a per-poll value (`condition_time`, raw rates, timestamps)
     in `extra_state_attributes`: the recorder writes a `states` row on every
     attribute change, i.e. one per poll and per entity.

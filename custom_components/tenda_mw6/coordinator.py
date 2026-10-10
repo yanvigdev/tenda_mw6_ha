@@ -42,7 +42,18 @@ class TendaMW6Coordinator(DataUpdateCoordinator[list[TendaMW6Client]]):
         hass: HomeAssistant,
         api: TendaMW6Api,
         device_aliases: dict[str, str] | None = None,
+        signal_hysteresis: int = 0,
     ) -> None:
+        """Create the coordinator.
+
+        Args:
+            hass: Home Assistant instance.
+            api: Local TCP/9000 client.
+            device_aliases: IP or MAC → display name, from the entry options.
+            signal_hysteresis: Deviation in dBm a client signal must exceed before
+                its sensor changes (see ``api.apply_signal_hysteresis``); read by
+                the signal sensors, 0 disables it.
+        """
         super().__init__(
             hass,
             logger=__import__("logging").getLogger(__name__),
@@ -51,6 +62,7 @@ class TendaMW6Coordinator(DataUpdateCoordinator[list[TendaMW6Client]]):
         )
         self.api = api
         self.device_aliases = device_aliases or {}
+        self.signal_hysteresis = signal_hysteresis
         # Global QoS caps, refreshed on a best-effort basis on every poll.
         self.qos: TendaMW6Qos | None = None
 

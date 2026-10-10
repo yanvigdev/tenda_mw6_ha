@@ -27,13 +27,15 @@
   "options": {
     "step": {
       "init": {
-        "title": "Mapa urządzeń",
-        "description": "Integracja wpisała wszystkie urządzenia aktualnie znane routerowi. Każdy wiersz zawiera IP, MAC i nazwę. Zmień tekst po znaku =. Pozostaw go pusty, aby wyświetlać IP.",
+        "title": "Nazwy urządzeń i sygnał",
+        "description": "Integracja wyświetliła wszystkie urządzenia znane obecnie routerowi. Każdy wiersz zawiera IP, MAC i nazwę. Edytuj tekst po znaku =. Pozostaw pusty, aby wyświetlić IP.\n\nPoniżej histereza sygnału ogranicza częstotliwość zmian czujników Sygnał.",
         "data": {
-          "device_aliases": "IP | MAC = nazwa"
+          "device_aliases": "IP | MAC = nazwa",
+          "signal_hysteresis": "Histereza sygnału"
         },
         "data_description": {
-          "device_aliases": "Nie usuwaj IP ani MAC. Pusta nazwa po znaku = wymusza wyświetlanie IP. Usunięcie całego wiersza przywraca nazwę zgłaszaną przez router."
+          "device_aliases": "Nie usuwaj IP ani MAC. Pusta nazwa po znaku = wymusza wyświetlanie IP. Usunięcie całego wiersza przywraca nazwę zgłaszaną przez router.",
+          "signal_hysteresis": "Szum radiowy zmienia sygnał nieruchomego klienta o 1–2 dBm między odczytami, a Home Assistant zapisuje każdą zmianę w bazie. Czujnik Sygnał zmienia się tylko wtedy, gdy zmierzona wartość różni się od wyświetlanej o więcej niż tyle dBm. Wartość 2 usuwa około 70 % zapisów, kosztem wyświetlanej wartości różniącej się maksymalnie o 2 dBm. 0 wyłącza histerezę (każda zmiana jest zapisywana). Utrata lub powrót sygnału są zawsze pokazywane od razu. Czujniki węzłów zachowują dokładną wartość."
         }
       }
     },
