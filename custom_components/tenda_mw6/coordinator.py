@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.util import dt as dt_util
 
 from .api import (
     TendaMW6Api,
@@ -52,15 +51,12 @@ class TendaMW6Coordinator(DataUpdateCoordinator[list[TendaMW6Client]]):
         )
         self.api = api
         self.device_aliases = device_aliases or {}
-        self._last_reported_online_at: datetime | None = None
         # Global QoS caps, refreshed on a best-effort basis on every poll.
         self.qos: TendaMW6Qos | None = None
 
     async def _async_update_data(self) -> list[TendaMW6Client]:
         try:
             clients = await self.hass.async_add_executor_job(self.api.get_clients)
-            if summarize_inventory(clients).reported_online:
-                self._last_reported_online_at = dt_util.utcnow()
         except (OSError, TendaMW6Error) as exc:
             raise UpdateFailed(f"Unable to read Tenda MW6 clients: {exc}") from exc
 
@@ -99,12 +95,3 @@ class TendaMW6Coordinator(DataUpdateCoordinator[list[TendaMW6Client]]):
     def transfer_readiness(self) -> TendaMW6TransferReadiness:
         """Return whether the current HostList can drive local transfer counters."""
         return summarize_transfer_readiness(self.data or [])
-
-    @property
-    def last_reported_online_at(self) -> datetime | None:
-        """Return when a successful poll last contained any reported-online client.
-
-        This is local Home Assistant observation time, not the firmware's
-        last_seen value, which is not exposed through the confirmed API.
-        """
-        return self._last_reported_online_at

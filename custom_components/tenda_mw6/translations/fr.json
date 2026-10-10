@@ -66,6 +66,13 @@
       },
       "node_weakest_signal": {
         "name": "Signal le plus faible"
+      },
+      "connection_type": {
+        "name": "Type de connexion",
+        "state": {
+          "wifi": "Wi-Fi",
+          "wired": "Filaire"
+        }
       }
     }
   }

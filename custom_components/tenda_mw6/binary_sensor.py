@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import DOMAIN
 from .api import TendaMW6Client
 from .coordinator import TendaMW6Coordinator
+from .entity_naming import client_object_id
 
 
 async def async_setup_entry(
@@ -30,7 +31,11 @@ async def async_setup_entry(
             if not mac or mac in known_macs:
                 continue
             known_macs.add(mac)
-            entities.append(TendaMW6ClientOnlineBinarySensor(coordinator, entry, mac))
+            entities.append(
+                TendaMW6ClientOnlineBinarySensor(
+                    coordinator, entry, mac, coordinator.client_display_name(client)
+                )
+            )
 
         if entities:
             async_add_entities(entities)
@@ -42,7 +47,11 @@ async def async_setup_entry(
 class TendaMW6ClientOnlineBinarySensor(
     CoordinatorEntity[TendaMW6Coordinator], BinarySensorEntity
 ):
-    """Reported client online state, withheld when the complete inventory is stale."""
+    """Reported client online state, withheld when the complete inventory is stale.
+
+    The suggested entity id is ``binary_sensor.tenda_mw6_<display name>_online``;
+    it only applies to a client registered for the first time.
+    """
 
     _attr_has_entity_name = True
     _attr_name = "Online"
@@ -54,11 +63,13 @@ class TendaMW6ClientOnlineBinarySensor(
         coordinator: TendaMW6Coordinator,
         entry: ConfigEntry,
         mac: str,
+        display_name: str,
     ) -> None:
         super().__init__(coordinator)
         self._entry = entry
         self._mac = mac.lower()
         self._attr_unique_id = f"{entry.entry_id}_{self._mac}_online"
+        self.entity_id = f"binary_sensor.{client_object_id(display_name, self._mac, 'online')}"
 
     @property
     def _client(self) -> TendaMW6Client | None:
