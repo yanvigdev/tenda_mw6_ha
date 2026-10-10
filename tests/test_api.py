@@ -108,6 +108,26 @@ class InventorySummaryTest(unittest.TestCase):
         self.assertEqual(readiness.clients_with_download_rate, 1)
         self.assertFalse(readiness.inventory_all_reported_offline)
 
+    def test_connection_type_prefers_firmware_access_field(self) -> None:
+        """A known word in the firmware ``access`` field wins over the signal."""
+        wired = self.client(1)
+        wired.access = "Wired"
+        wired.signal = -40
+        self.assertEqual(API.client_connection_type(wired), "wired")
+
+    def test_connection_type_is_wifi_when_a_signal_is_reported(self) -> None:
+        wifi = self.client(1)
+        wifi.signal = -61
+        self.assertEqual(API.client_connection_type(wifi), "wifi")
+
+    def test_connection_type_is_wired_for_online_client_without_signal(self) -> None:
+        self.assertEqual(API.client_connection_type(self.client(1)), "wired")
+
+    def test_connection_type_is_unknown_for_offline_client_without_signal(self) -> None:
+        """An offline client keeps no signal: wired must not be guessed."""
+        self.assertIsNone(API.client_connection_type(self.client(0)))
+        self.assertIsNone(API.client_connection_type(self.client(None)))
+
 
 class NodeSummaryTest(unittest.TestCase):
     """summarize_nodes groups the HostList per mesh node without querying nodes."""

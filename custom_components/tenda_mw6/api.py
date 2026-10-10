@@ -211,6 +211,46 @@ def summarize_transfer_readiness(
     )
 
 
+# Words observed or plausible in the firmware ``access`` field, lower-cased.
+_WIRED_ACCESS = frozenset({"wired", "lan", "ethernet", "cable"})
+_WIFI_ACCESS = frozenset({"wifi", "wi-fi", "wlan", "2.4g", "5g", "2.4ghz", "5ghz"})
+
+
+def client_connection_type(client: TendaMW6Client) -> str | None:
+    """Return ``"wifi"``, ``"wired"`` or None for one HostList entry.
+
+    The firmware ``access`` field is honoured when it carries a known word, but
+    live MW6 meshes leave it empty for every client: the type is then derived
+    from the signal, which only Wi-Fi clients report. An offline client without
+    signal is left unknown rather than guessed wired, because the HostList
+    drops the signal of a client that is no longer associated.
+
+    Example:
+        >>> def c(online, signal, access=None):
+        ...     return TendaMW6Client(
+        ...         ip="", mac="", name="", node_sn="", signal=signal, access=access,
+        ...         condition_time=None, raw_online=online, raw_uprate=None,
+        ...         raw_downrate=None,
+        ...     )
+        >>> client_connection_type(c(1, -60)), client_connection_type(c(1, None))
+        ('wifi', 'wired')
+        >>> client_connection_type(c(0, None)) is None
+        True
+        >>> client_connection_type(c(1, -60, "Wired"))
+        'wired'
+    """
+    access = (client.access or "").strip().lower()
+    if access in _WIRED_ACCESS:
+        return "wired"
+    if access in _WIFI_ACCESS:
+        return "wifi"
+    if client.signal is not None:
+        return "wifi"
+    if client.raw_online in (None, 0):
+        return None
+    return "wired"
+
+
 def estimate_transfer_bytes(rate_kib_s: int | None, elapsed_seconds: float) -> float:
     """Estimate transferred bytes from one valid instantaneous MW6 rate sample.
 
