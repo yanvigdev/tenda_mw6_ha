@@ -103,13 +103,21 @@ weak_signal_threshold: -70   # optionnel, en dBm
 
 La carte affiche une colonne par borne (triées par pièce puis par nom) avec ses
 clients : pastille verte à −60 dBm ou mieux, orange en dessous, rouge au seuil ou en
-dessous, icône réseau pour les clients filaires. Les interrupteurs « Hors ligne » et
-« Signal faible seulement » sont mémorisés par navigateur. Les clients dont la borne est
-inconnue sont regroupés sous « Sans borne ». Un clic sur un client ou une borne ouvre sa
-fiche.
+dessous, icône réseau pour les clients filaires. L'en-tête de chaque borne affiche aussi
+le **signal médian** de ses clients Wi-Fi en ligne, avec la pastille de son niveau ; il
+décrit toute la borne et ignore les filtres, comme le compteur « en ligne » (pour un
+nombre pair, la moyenne des deux valeurs centrales est arrondie vers le signal le plus
+faible).
+
+Interrupteurs, mémorisés par navigateur : « Hors ligne », « Signal faible seulement »,
+et les deux filtres de connexion exclusifs « Filaire seulement » / « Sans fil
+seulement » (en cocher un décoche l'autre). Un client hors ligne ne rapporte pas de
+signal : son type de connexion est inconnu et les deux filtres de connexion le masquent.
+Les clients dont la borne est inconnue sont regroupés sous « Sans borne ». Un clic sur
+un client ou une borne ouvre sa fiche.
 
 Si la carte est signalée « Custom element not found: tenda-mw6-topology-card »,
-déclarez-la comme ressource Lovelace : URL `/tenda_mw6/tenda-mw6-topology-card.js?v=1`,
+déclarez-la comme ressource Lovelace : URL `/tenda_mw6/tenda-mw6-topology-card.js?v=2`,
 type **Module JavaScript**.
 
 ## Entités exposées

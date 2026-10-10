@@ -17,11 +17,13 @@
  *   weak_signal_threshold: -70   # optional, dBm
  */
 
-const MW6T_CARD_VERSION = "1.0.0";
+const MW6T_CARD_VERSION = "1.1.0";
 /** Default weak-signal threshold in dBm: a signal at or below it is "weak". */
 const MW6T_DEFAULT_WEAK = -70;
 /** A signal at or above this value (dBm) is "good". */
 const MW6T_GOOD_SIGNAL = -60;
+/** Values of the connection filter: every client, Wi-Fi clients only, wired clients only. */
+const MW6T_CONNECTIONS = ["all", "wifi", "wired"];
 
 /**
  * Escape a value for safe insertion into HTML text or attributes.
@@ -166,14 +168,68 @@ function mw6tCollectClients(states, entryId) {
 
 /**
  * Apply the view filters to one client.
+ *
+ * The connection filter keeps Wi-Fi clients (a signal is reported) or wired ones
+ * (online without signal). An offline client reports no signal, so its type is
+ * unknown and both connection filters hide it, even when offline clients are shown.
+ *
  * @param {object} client Client from mw6tCollectClients.
- * @param {{showOffline: boolean, weakOnly: boolean, weakThreshold: number}} options
+ * @param {{showOffline: boolean, weakOnly: boolean, weakThreshold: number, connection: string}} options
  * @returns {boolean} True when the client must be displayed.
  */
 function mw6tKeepClient(client, options) {
   if (!options.showOffline && client.online !== true) return false;
+  if (options.connection === "wifi" && client.signal === null) return false;
+  if (options.connection === "wired" && !client.wired) return false;
   if (options.weakOnly) return client.signal !== null && client.signal <= options.weakThreshold;
   return true;
+}
+
+/**
+ * Median of a list of signals in dBm, as an integer.
+ *
+ * With an even count the mean of the two middle values is rounded down, i.e. toward
+ * the weaker signal, so a borderline node is never shown better than it is.
+ *
+ * @example
+ *   mw6tMedian([-50, -80, -60]); // -60
+ *   mw6tMedian([-61, -62]);      // -62 (-61.5 rounded toward the weaker value)
+ *   mw6tMedian([]);              // null
+ *
+ * @param {number[]} values Signals; the array is not modified.
+ * @returns {number|null} The median, or null for an empty list.
+ */
+function mw6tMedian(values) {
+  if (!values || !values.length) return null;
+  const sorted = values.slice().sort(function (a, b) { return a - b; });
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2) return sorted[middle];
+  return Math.floor((sorted[middle - 1] + sorted[middle]) / 2);
+}
+
+/**
+ * Median signal of the online Wi-Fi clients of a list, whatever the view filters.
+ * @param {object[]} clients Clients from mw6tCollectClients.
+ * @returns {number|null} The median in dBm, or null without any online Wi-Fi client.
+ */
+function mw6tMedianSignal(clients) {
+  return mw6tMedian(clients
+    .filter(function (client) { return client.online === true && client.signal !== null; })
+    .map(function (client) { return client.signal; }));
+}
+
+/**
+ * Next value of the connection filter after a click on one of its two checkboxes.
+ * The checkboxes are exclusive: checking one replaces the other, unchecking the
+ * active one returns to "all", unchecking an inactive one changes nothing.
+ * @param {string} current Current filter value.
+ * @param {"wifi"|"wired"} clicked Checkbox clicked.
+ * @param {boolean} checked New state of that checkbox.
+ * @returns {string} One of MW6T_CONNECTIONS.
+ */
+function mw6tNextConnection(current, clicked, checked) {
+  if (checked) return clicked;
+  return current === clicked ? "all" : current;
 }
 
 /**
@@ -207,25 +263,30 @@ function mw6tCompareNodes(left, right) {
 /**
  * Build the topology shown by the card.
  *
- * `online` and `total` of a node count all its clients, whatever the filters; `clients`
+ * `online`, `total` and `medianSignal` (median dBm of the online Wi-Fi clients, null
+ * without any) describe all the clients of a node, whatever the filters; `clients`
  * holds only the filtered, sorted ones. Clients whose node has no sensor (unknown or
- * empty node_sn) go to `orphans`, with the same filters.
+ * empty node_sn) go to `orphans`, with the same filters; `orphansMedianSignal` is
+ * their median before filtering, like a node's.
  *
  * @example
  *   const topo = mw6tBuildTopology(hass.states, hass.entities, hass.devices, hass.areas,
- *     { weakOnly: true, weakThreshold: -70 });
- *   topo.nodes[0]; // { sn, name: "Borne salon", area: "Salon", online: 6, total: 6, clients: [...] }
+ *     { weakOnly: true, weakThreshold: -70, connection: "wifi" });
+ *   topo.nodes[0]; // { sn, name: "Borne salon", area: "Salon", online: 6, total: 6,
+ *                  //   medianSignal: -58, clients: [...] }
  *
  * @param {object} states hass.states.
  * @param {object} entities hass.entities.
  * @param {object} devices hass.devices.
  * @param {object} areas hass.areas.
- * @param {{showOffline?: boolean, weakOnly?: boolean, weakThreshold?: number, entryId?: string|null}} options
- * @returns {{nodes: object[], orphans: object[]}}
+ * @param {{showOffline?: boolean, weakOnly?: boolean, weakThreshold?: number,
+ *          connection?: string, entryId?: string|null}} options
+ *        `connection` is "all" (default), "wifi" or "wired"; any other value means "all".
+ * @returns {{nodes: object[], orphans: object[], orphansMedianSignal: number|null}}
  */
 function mw6tBuildTopology(states, entities, devices, areas, options) {
   const opts = Object.assign(
-    { showOffline: false, weakOnly: false, weakThreshold: MW6T_DEFAULT_WEAK, entryId: null },
+    { showOffline: false, weakOnly: false, weakThreshold: MW6T_DEFAULT_WEAK, connection: "all", entryId: null },
     options || {}
   );
   const nodes = mw6tCollectNodes(states, entities, devices, areas, opts.entryId);
@@ -239,6 +300,7 @@ function mw6tBuildTopology(states, entities, devices, areas, options) {
     return Object.assign({}, node, {
       online: node.clients.filter(function (client) { return client.online === true; }).length,
       total: node.clients.length,
+      medianSignal: mw6tMedianSignal(node.clients),
       clients: node.clients
         .filter(function (client) { return mw6tKeepClient(client, opts); })
         .sort(mw6tCompareClients),
@@ -250,6 +312,7 @@ function mw6tBuildTopology(states, entities, devices, areas, options) {
     orphans: orphans
       .filter(function (client) { return mw6tKeepClient(client, opts); })
       .sort(mw6tCompareClients),
+    orphansMedianSignal: mw6tMedianSignal(orphans),
   };
 }
 
@@ -273,6 +336,9 @@ const MW6T_I18N = {
     title: "Mesh Wi-Fi topology",
     showOffline: "Offline",
     weakOnly: "Weak signal only",
+    wiredOnly: "Wired only",
+    wifiOnly: "Wireless only",
+    median: "Median",
     online: "online",
     orphans: "No node",
     empty: "No device",
@@ -282,6 +348,9 @@ const MW6T_I18N = {
     title: "Topologie du mesh Wi-Fi",
     showOffline: "Hors ligne",
     weakOnly: "Signal faible seulement",
+    wiredOnly: "Filaire seulement",
+    wifiOnly: "Sans fil seulement",
+    median: "Médiane",
     online: "en ligne",
     orphans: "Sans borne",
     empty: "Aucun appareil",
@@ -291,6 +360,9 @@ const MW6T_I18N = {
     title: "Topologia sieci mesh",
     showOffline: "Offline",
     weakOnly: "Tylko słaby sygnał",
+    wiredOnly: "Tylko przewodowe",
+    wifiOnly: "Tylko bezprzewodowe",
+    median: "Mediana",
     online: "online",
     orphans: "Bez węzła",
     empty: "Brak urządzeń",
@@ -304,14 +376,16 @@ const MW6T_STORAGE_KEY = "tenda-mw6-topology-card:settings";
 /**
  * Read the toggle state saved in this browser.
  * Storage may be blocked (private mode, previews): defaults are returned then.
- * @returns {{showOffline: boolean, weakOnly: boolean}}
+ * An unknown connection value (older card, hand-edited storage) falls back to "all".
+ * @returns {{showOffline: boolean, weakOnly: boolean, connection: string}}
  */
 function mw6tLoadSettings() {
-  const settings = { showOffline: false, weakOnly: false };
+  const settings = { showOffline: false, weakOnly: false, connection: "all" };
   try {
     const parsed = JSON.parse(window.localStorage.getItem(MW6T_STORAGE_KEY) || "{}");
     settings.showOffline = parsed.showOffline === true;
     settings.weakOnly = parsed.weakOnly === true;
+    if (MW6T_CONNECTIONS.includes(parsed.connection)) settings.connection = parsed.connection;
   } catch (_) {
     // Storage unavailable or corrupted: keep the defaults.
   }
@@ -320,7 +394,7 @@ function mw6tLoadSettings() {
 
 /**
  * Save the toggle state in this browser; failures are ignored (the card still works).
- * @param {{showOffline: boolean, weakOnly: boolean}} settings
+ * @param {{showOffline: boolean, weakOnly: boolean, connection: string}} settings
  */
 function mw6tSaveSettings(settings) {
   try {
@@ -343,7 +417,9 @@ const MW6T_STYLES = [
   ".node { margin-bottom:8px; }",
   ".node[data-entity] { cursor:pointer; }",
   ".node-name { font-weight:600; color:var(--primary-text-color); }",
-  ".area, .count, .none, .empty { font-size:.75rem; color:var(--secondary-text-color); }",
+  ".area, .count, .median, .none, .empty { font-size:.75rem; color:var(--secondary-text-color); }",
+  ".median { display:flex; align-items:center; gap:4px; }",
+  ".median .dot { width:8px; height:8px; }",
   ".client { display:grid; grid-template-columns:10px minmax(0,1fr) auto; column-gap:8px; align-items:center; padding:4px 0; font-size:.85rem; color:var(--primary-text-color); }",
   ".client[data-entity] { cursor:pointer; }",
   ".client.offline { opacity:.5; }",
@@ -426,16 +502,35 @@ class TendaMW6TopologyCard extends HTMLElement {
     return mw6tBuildTopology(hass.states, hass.entities, hass.devices, hass.areas, {
       showOffline: this._settings.showOffline,
       weakOnly: this._settings.weakOnly,
+      connection: this._settings.connection,
       weakThreshold: this._weakThreshold(),
       entryId: this._config.entry_id || null,
     });
   }
 
+  /**
+   * Checkboxes of the view filters: two independent ones (data-setting) and the two
+   * exclusive connection ones (data-connection), checked when that filter is active.
+   */
   _togglesHtml() {
-    return '<div class="toggles">' + ["showOffline", "weakOnly"].map(function (key) {
+    const independent = ["showOffline", "weakOnly"].map(function (key) {
       return '<label><input type="checkbox" data-setting="' + key + '"' +
         (this._settings[key] ? " checked" : "") + "> " + mw6tEscape(this._t(key)) + "</label>";
-    }, this).join("") + "</div>";
+    }, this);
+    const connection = [["wired", "wiredOnly"], ["wifi", "wifiOnly"]].map(function (pair) {
+      return '<label><input type="checkbox" data-connection="' + pair[0] + '"' +
+        (this._settings.connection === pair[0] ? " checked" : "") + "> " +
+        mw6tEscape(this._t(pair[1])) + "</label>";
+    }, this);
+    return '<div class="toggles">' + independent.concat(connection).join("") + "</div>";
+  }
+
+  /** Median line of a column header, with the dot of its level; empty when null. */
+  _medianHtml(median, threshold) {
+    if (median === null || median === undefined) return "";
+    const level = mw6tSignalLevel({ signal: median }, threshold);
+    return '<div class="median"><span class="dot ' + level + '"></span>' +
+      mw6tEscape(this._t("median") + " : " + median + " dBm") + "</div>";
   }
 
   _clientHtml(client, threshold) {
@@ -457,7 +552,8 @@ class TendaMW6TopologyCard extends HTMLElement {
       (column.entityId ? ' data-entity="' + mw6tEscape(column.entityId) + '"' : "") + ">" +
       '<div class="node-name">' + mw6tEscape(column.name) + "</div>" +
       (column.area ? '<div class="area">' + mw6tEscape(column.area) + "</div>" : "") +
-      '<div class="count">' + column.online + "/" + column.total + " " + mw6tEscape(this._t("online")) + "</div></div>";
+      '<div class="count">' + column.online + "/" + column.total + " " + mw6tEscape(this._t("online")) + "</div>" +
+      this._medianHtml(column.medianSignal, threshold) + "</div>";
     const rows = column.clients.length
       ? column.clients.map(function (client) { return this._clientHtml(client, threshold); }, this).join("")
       : '<div class="none">' + mw6tEscape(this._t("empty")) + "</div>";
@@ -476,6 +572,7 @@ class TendaMW6TopologyCard extends HTMLElement {
         entityId: null,
         online: topology.orphans.filter(function (client) { return client.online === true; }).length,
         total: topology.orphans.length,
+        medianSignal: topology.orphansMedianSignal,
         clients: topology.orphans,
       }, threshold));
     }
@@ -495,6 +592,16 @@ class TendaMW6TopologyCard extends HTMLElement {
     this.shadowRoot.querySelectorAll("input[data-setting]").forEach(function (input) {
       input.addEventListener("change", function () {
         this._settings[input.dataset.setting] = input.checked;
+        mw6tSaveSettings(this._settings);
+        this._signature = null;
+        this._render();
+      }.bind(this));
+    }, this);
+    this.shadowRoot.querySelectorAll("input[data-connection]").forEach(function (input) {
+      input.addEventListener("change", function () {
+        this._settings.connection = mw6tNextConnection(
+          this._settings.connection, input.dataset.connection, input.checked
+        );
         mw6tSaveSettings(this._settings);
         this._signature = null;
         this._render();
@@ -532,6 +639,8 @@ if (typeof module !== "undefined" && module.exports) {
     MW6T_DEFAULT_WEAK: MW6T_DEFAULT_WEAK,
     mw6tBuildTopology: mw6tBuildTopology,
     mw6tEscape: mw6tEscape,
+    mw6tMedian: mw6tMedian,
+    mw6tNextConnection: mw6tNextConnection,
     mw6tNumber: mw6tNumber,
     mw6tSignalLevel: mw6tSignalLevel,
   };
