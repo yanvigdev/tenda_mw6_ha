@@ -11,14 +11,28 @@ Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
     `TendaMW6Api.get_clients()` → `GET_STA` (0x18/0x00) → `LOGIN` (0x18/0x01) →
     `MESH_HOSTS_GET` (0x14/0x00). `get_qos()` → `QOS_GET` (0x17/0x08), read-only.
     `SERIAL_RE` validates the serial (`^[0-9A-Za-z]{6,32}$`).
-  - `__init__.py`: `CONF_SERIAL = "serial"`. Config schema **version 3**.
-    `async_migrate_entry` refuses v1/v2 (no conversion to a serial is possible).
+  - `__init__.py`: `CONF_SERIAL = "serial"`. Config schema **version 3, minor 2**.
+    `async_migrate_entry` refuses v1/v2 (no conversion to a serial is possible);
+    minor 1 → 2 disables the enabled rate/transfer entities
+    (`RegistryEntryDisabler.INTEGRATION`, user-disabled ones untouched).
+    `async_remove_config_entry_device` lets the user delete a client/node device
+    absent from the last poll (rule in `entity_naming.is_device_removable`).
+  - `entity_naming.py` (no HA import, tested): `client_object_id()` →
+    `tenda_mw6_<slug>_<suffix>` suggested as entity id of a new client (the
+    registry keeps existing ids); `is_rate_or_transfer_unique_id()`;
+    `is_device_removable()`.
   - `config_flow.py`: host / port / serial input, with real validation.
   - `coordinator.py`: client poll every 60 s (`UPDATE_INTERVAL`, raised from 10 s
     to limit HA recorder writes) + best-effort QoS read (a QoS failure never
     fails the client poll). `MAX_TRANSFER_SAMPLE_GAP_SECONDS` (3 periods) bounds
     the rate-integration gap of the transfer sensors: keep it tied to the period.
-  - `sensor.py`, `binary_sensor.py`, `select.py`.
+  - `sensor.py`, `binary_sensor.py`, `select.py`. Client rate/transfer sensors and
+    the aggregate ones are `_attr_entity_registry_enabled_default = False` (a
+    bridged mesh reports 0 rates). Connection type = ENUM sensor fed by
+    `api.client_connection_type()` (signal-derived; firmware `access` is empty).
+    **Rule:** never put a per-poll value (`condition_time`, raw rates, timestamps)
+    in `extra_state_attributes`: the recorder writes a `states` row on every
+    attribute change, i.e. one per poll and per entity.
   - `tenda-mw6-card.js`: Lovelace card (English labels, hardcoded).
   - `tenda-mw6-topology-card.js`: topology card (one column per node). Pure model
     (`mw6tBuildTopology`, `mw6tSignalLevel`, ...) exported via `module.exports` for
@@ -32,9 +46,9 @@ Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
     node without clients keeps its entities across restarts.
   - `translations/`: `en.json`, `fr.json`, `pl.json`; `strings.json` = English
     source. Entity names and sort-option labels are localized here
-    (`entity.select.*`).
-- `tests/test_api.py` (Python unittest), `tests/test_card.js` and
-  `tests/test_topology_card.js` (Node).
+    (`entity.select.*`, `entity.sensor.*` incl. `connection_type` states).
+- `tests/test_api.py`, `tests/test_node_identity.py`, `tests/test_entity_naming.py`
+  (Python unittest + doctests), `tests/test_card.js` and `tests/test_topology_card.js` (Node).
 
 ## Commands
 
@@ -46,6 +60,7 @@ python3 -m unittest tests.test_api                     # API tests
 node tests/test_card.js                                # card logic
 node tests/test_topology_card.js                       # topology card
 python3 -m unittest tests.test_node_identity           # node device identifiers
+python3 -m unittest tests.test_entity_naming           # entity ids, rate/transfer policy, removable devices
 node -c custom_components/tenda_mw6/tenda-mw6-card.js  # JS syntax check
 ```
 

@@ -110,18 +110,51 @@ it as a Lovelace resource: URL `/tenda_mw6/tenda-mw6-topology-card.js?v=1`, type
 
 ## Exposed entities
 
-Per client device: online state, Wi-Fi signal, up/down rate, accumulated
-transfer (total/day/month), IP address, attached node and connection type
-(wired/Wi-Fi).
+Per client device: online state, Wi-Fi signal, IP address, attached node and
+connection type (`wifi` / `wired`, an ENUM sensor). The firmware leaves its
+`access` field empty, so the type is derived from the signal: a client reporting
+one is on Wi-Fi, an online client without one is wired, an offline client is
+unknown.
 
-At the mesh level: inventory summary, transfer-counting health, aggregate rates,
-aggregate transfers, and — as diagnostics — the **global QoS caps**
-(`QoS upload cap` / `QoS download cap`, read-only `QOS_GET`; raw values, unit
-unconfirmed).
+Also per client, **disabled by default**: up/down rate and accumulated transfer
+(total/day/month). A mesh in bridge mode reports a zero rate for every client,
+and six transfer sensors per client feeding long-term statistics with zeros was
+the main database cost of the integration. Enable them from the entity settings
+when `Transfer counting health` reports `rate_observed`.
+
+At the mesh level: inventory summary, transfer-counting health, aggregate rates
+and transfers (disabled by default, same reason), and — as diagnostics — the
+**global QoS caps** (`QoS upload cap` / `QoS download cap`, read-only
+`QOS_GET`; raw values, unit unconfirmed).
 
 Per mesh node (one device per node): connected clients (with the total in
 attributes), Wi-Fi clients and weakest signal (with the client concerned in
 attributes), all derived from the client list.
+
+Entity ids of clients discovered since 2.2.0 are prefixed
+`sensor.tenda_mw6_<name>_<metric>` (and `binary_sensor.tenda_mw6_<name>_online`)
+so they never collide with entities of another integration named after the same
+device (the companion app also creates `sensor.<phone>_connection_type`). Ids
+already in the registry are kept.
+
+Entity attributes only carry values that change when the client changes
+(address, name, node, connection type): a value rewritten on every poll would
+make the recorder store one state row per poll and per entity.
+
+### Removing a device the mesh no longer reports
+
+A client that left (a phone, a replaced board) or a node seen as a client during
+setup keeps its device, with unavailable entities. Open the device page in Home
+Assistant and use **Delete**: the integration accepts the removal of any client
+or node absent from the last poll, and refuses the hub and present devices.
+
+### Upgrading to 2.2.0
+
+On the first start the config entry is migrated (schema 3.2): rate and transfer
+entities still enabled are disabled by the integration (entities you disabled
+yourself are left alone); you may re-enable any of them. Their past statistics
+are not deleted: use `recorder.clear_statistics` (Developer tools → Actions) or
+the **Fix issue** prompts of the statistics page if you want to reclaim the space.
 
 ## Architecture
 
@@ -132,6 +165,8 @@ attributes), all derived from the client list.
 - `config_flow.py`: input and validation (host, port, serial number).
 - `coordinator.py`: periodic polling, every 60 s (`UPDATE_INTERVAL`); transfer counters skip gaps longer than three periods.
 - `sensor.py` / `binary_sensor.py` / `select.py`: exposed entities.
+- `entity_naming.py`: entity id prefix, rate/transfer policy and removable-device
+  rule (pure Python, unit tested); `node_identity.py`: node device identifiers.
 - `tenda-mw6-card.js`: Lovelace card (device list).
 - `tenda-mw6-topology-card.js`: Lovelace topology card (one column per node).
 
