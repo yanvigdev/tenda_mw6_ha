@@ -108,6 +108,26 @@ class InventorySummaryTest(unittest.TestCase):
         self.assertEqual(readiness.clients_with_download_rate, 1)
         self.assertFalse(readiness.inventory_all_reported_offline)
 
+    def test_hysteresis_ignores_changes_within_threshold(self) -> None:
+        self.assertEqual(API.apply_signal_hysteresis(-60, -61, 2), -60)
+        self.assertEqual(API.apply_signal_hysteresis(-60, -58, 2), -60)
+
+    def test_hysteresis_publishes_changes_beyond_threshold(self) -> None:
+        self.assertEqual(API.apply_signal_hysteresis(-60, -63, 2), -63)
+        self.assertEqual(API.apply_signal_hysteresis(-60, -57, 2), -57)
+
+    def test_hysteresis_zero_publishes_every_change(self) -> None:
+        self.assertEqual(API.apply_signal_hysteresis(-60, -61, 0), -61)
+
+    def test_hysteresis_never_holds_a_missing_value(self) -> None:
+        """Losing or gaining a signal (offline, wired, first poll) is published at once."""
+        self.assertIsNone(API.apply_signal_hysteresis(-60, None, 2))
+        self.assertEqual(API.apply_signal_hysteresis(None, -61, 2), -61)
+        self.assertIsNone(API.apply_signal_hysteresis(None, None, 2))
+
+    def test_hysteresis_treats_negative_threshold_as_zero(self) -> None:
+        self.assertEqual(API.apply_signal_hysteresis(-60, -61, -3), -61)
+
     def test_connection_type_prefers_firmware_access_field(self) -> None:
         """A known word in the firmware ``access`` field wins over the signal."""
         wired = self.client(1)

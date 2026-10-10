@@ -58,8 +58,19 @@ Assistant, avec une carte Lovelace fournie.
 | `port` | Port du service local | `9000` |
 | `serial` | Numéro de série d'un nœud (champ `qrmsg`) | `E00000000000000000` |
 
-Les noms d'appareils peuvent être personnalisés via les **options** de
-l'intégration (correspondance `IP | MAC = nom`).
+Les **options** de l'intégration (Paramètres → Appareils et services → Tenda MW6
+→ Configurer) contiennent deux réglages ; les enregistrer recharge l'intégration :
+
+- **Noms des appareils** : correspondance `IP | MAC = nom`.
+- **Hystérésis du signal** (dBm, **2** par défaut, de 0 à 10) : le bruit radio fait
+  varier le signal d'un client immobile de 1 à 2 dBm entre deux relevés, et Home
+  Assistant enregistre chaque changement. Un capteur Signal client ne change que si
+  la mesure s'écarte de la valeur affichée de plus de ce nombre de dBm. Sur un mesh
+  réel, 2 a supprimé environ 70 % de ces écritures ; la valeur affichée peut alors
+  avoir jusqu'à 2 dBm d'écart. `0` la désactive. La perte ou le retour d'un signal
+  sont toujours affichés tout de suite ; les capteurs des bornes gardent la valeur
+  exacte. La médiane de la carte topologie lit les capteurs clients : elle suit les
+  valeurs lissées.
 
 ## La carte Lovelace
 

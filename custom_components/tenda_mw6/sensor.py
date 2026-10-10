@@ -18,6 +18,7 @@ from . import DOMAIN
 from .api import (
     TendaMW6Client,
     TendaMW6NodeSummary,
+    apply_signal_hysteresis,
     client_connection_type,
     estimate_transfer_bytes,
 )
@@ -574,6 +575,11 @@ class TendaMW6ClientSignalSensor(TendaMW6ClientSensorBase):
     per-poll firmware fields (``condition_time``, raw rates) used to be exposed
     here, which made the recorder store one state row per poll and per client
     even with a steady signal.
+
+    The published value follows the ``signal_hysteresis`` option: it only moves
+    when the measured signal differs from it by more than that many dBm (see
+    :func:`apply_signal_hysteresis`). Home Assistant does not record a state
+    write whose value and attributes are unchanged, so a held value costs nothing.
     """
 
     _attr_icon = "mdi:wifi"
@@ -588,11 +594,23 @@ class TendaMW6ClientSignalSensor(TendaMW6ClientSensorBase):
         display_name: str,
     ) -> None:
         super().__init__(coordinator, entry, mac, display_name, "signal")
+        client = self._client
+        # Seeded with the current measurement so the first state is exact.
+        self._reported_signal: int | None = client.signal if client is not None else None
+
+    def _handle_coordinator_update(self) -> None:
+        """Move the published signal only beyond the configured deviation."""
+        client = self._client
+        self._reported_signal = apply_signal_hysteresis(
+            self._reported_signal,
+            client.signal if client is not None else None,
+            self.coordinator.signal_hysteresis,
+        )
+        super()._handle_coordinator_update()
 
     @property
     def native_value(self) -> int | None:
-        client = self._client
-        return client.signal if client is not None else None
+        return self._reported_signal
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

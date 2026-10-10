@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 import ipaddress
 from pathlib import Path
 import re
+from typing import Any
 
 from homeassistant.components.frontend import add_extra_js_url
 try:
@@ -28,6 +30,12 @@ PLATFORMS: tuple[Platform, ...] = (
 # (qrmsg field of the LoginMsg). Replaces the former 32-hex "account".
 CONF_SERIAL = "serial"
 CONF_DEVICE_ALIASES = "device_aliases"
+# Option: deviation (dBm) a client signal must exceed before its sensor changes.
+# 2 filters the 1-2 dBm radio noise that made up ~75 % of the recorded changes on
+# a real mesh; 0 disables the hysteresis. Bounds are enforced by the options form.
+CONF_SIGNAL_HYSTERESIS = "signal_hysteresis"
+DEFAULT_SIGNAL_HYSTERESIS = 2
+MAX_SIGNAL_HYSTERESIS = 10
 # Lovelace cards bundled with the integration, served from this package directory
 # under /tenda_mw6/<file name>.
 FRONTEND_FILES: tuple[str, ...] = (
@@ -112,6 +120,25 @@ def parse_device_aliases(raw: str) -> dict[str, str]:
     return aliases
 
 
+def signal_hysteresis_option(options: Mapping[str, Any]) -> int:
+    """Return the signal hysteresis (dBm) stored in the entry options.
+
+    Entries created before the option existed, or holding an invalid value, get
+    the default; a stored value is clamped to 0..MAX_SIGNAL_HYSTERESIS.
+
+    Example:
+        >>> signal_hysteresis_option({}), signal_hysteresis_option({"signal_hysteresis": 0})
+        (2, 0)
+        >>> signal_hysteresis_option({"signal_hysteresis": "x"}), signal_hysteresis_option({"signal_hysteresis": 99.0})
+        (2, 10)
+    """
+    try:
+        value = int(options.get(CONF_SIGNAL_HYSTERESIS, DEFAULT_SIGNAL_HYSTERESIS))
+    except (TypeError, ValueError):
+        return DEFAULT_SIGNAL_HYSTERESIS
+    return min(max(value, 0), MAX_SIGNAL_HYSTERESIS)
+
+
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate config entries to the "serial number" schema.
 
@@ -153,7 +180,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         serial=str(entry.data[CONF_SERIAL]),
     )
     aliases = parse_device_aliases(str(entry.options.get(CONF_DEVICE_ALIASES, "")))
-    coordinator = TendaMW6Coordinator(hass, api, device_aliases=aliases)
+    coordinator = TendaMW6Coordinator(
+        hass,
+        api,
+        device_aliases=aliases,
+        signal_hysteresis=signal_hysteresis_option(entry.options),
+    )
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator

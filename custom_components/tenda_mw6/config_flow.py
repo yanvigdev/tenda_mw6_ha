@@ -16,8 +16,11 @@ from homeassistant.helpers import selector
 from . import (
     CONF_DEVICE_ALIASES,
     CONF_SERIAL,
+    CONF_SIGNAL_HYSTERESIS,
     DOMAIN,
+    MAX_SIGNAL_HYSTERESIS,
     parse_device_aliases,
+    signal_hysteresis_option,
 )
 from .api import SERIAL_RE, TendaMW6Api, TendaMW6AuthError, TendaMW6Error
 
@@ -156,17 +159,27 @@ def _render_current_device_map(
 
 
 class TendaMW6OptionsFlow(config_entries.OptionsFlow):
-    """Manage user-defined names for known clients."""
+    """Manage the entry options: client display names and signal hysteresis.
+
+    Saving the form reloads the entry (update listener in ``__init__.py``), so both
+    options apply immediately.
+    """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Edit the live IP/MAC/name map."""
+        """Edit the live IP/MAC/name map and the signal hysteresis (dBm)."""
         errors: dict[str, str] = {}
         submitted_raw: str | None = None
+        entry = self.hass.config_entries.async_get_entry(self.handler)
+        hysteresis = signal_hysteresis_option(entry.options if entry is not None else {})
 
         if user_input is not None:
             submitted_raw = str(user_input.get(CONF_DEVICE_ALIASES, ""))
+            # The number selector returns a float; keep the stored option an int.
+            hysteresis = signal_hysteresis_option(
+                {CONF_SIGNAL_HYSTERESIS: user_input.get(CONF_SIGNAL_HYSTERESIS, hysteresis)}
+            )
             try:
                 parse_device_aliases(submitted_raw)
             except ValueError:
@@ -174,10 +187,12 @@ class TendaMW6OptionsFlow(config_entries.OptionsFlow):
             else:
                 return self.async_create_entry(
                     title="",
-                    data={CONF_DEVICE_ALIASES: submitted_raw},
+                    data={
+                        CONF_DEVICE_ALIASES: submitted_raw,
+                        CONF_SIGNAL_HYSTERESIS: hysteresis,
+                    },
                 )
 
-        entry = self.hass.config_entries.async_get_entry(self.handler)
         saved_raw = (
             str(entry.options.get(CONF_DEVICE_ALIASES, "")) if entry is not None else ""
         )
@@ -197,7 +212,19 @@ class TendaMW6OptionsFlow(config_entries.OptionsFlow):
                     default=current_map,
                 ): selector.TextSelector(
                     selector.TextSelectorConfig(multiline=True)
-                )
+                ),
+                vol.Required(
+                    CONF_SIGNAL_HYSTERESIS,
+                    default=hysteresis,
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0,
+                        max=MAX_SIGNAL_HYSTERESIS,
+                        step=1,
+                        unit_of_measurement="dBm",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
             }
         )
         return self.async_show_form(

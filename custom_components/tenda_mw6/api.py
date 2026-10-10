@@ -251,6 +251,36 @@ def client_connection_type(client: TendaMW6Client) -> str | None:
     return "wired"
 
 
+def apply_signal_hysteresis(
+    reported: int | None, measured: int | None, threshold: int
+) -> int | None:
+    """Return the signal to publish, ignoring small variations around the last one.
+
+    Radio noise moves a steady client's signal by 1-2 dBm from poll to poll, and
+    every change is stored by the Home Assistant recorder. A new measurement only
+    replaces the published value when it differs by **more than** ``threshold``
+    dBm. Gaining or losing a signal (first poll, client offline or wired) is
+    always published at once, so availability is never delayed.
+
+    Args:
+        reported: Value currently published by the sensor, None if none yet.
+        measured: Value of the latest poll, None when the client reports no signal.
+        threshold: Tolerated deviation in dBm; 0 (or a negative value) publishes
+            every change.
+
+    Example:
+        >>> apply_signal_hysteresis(-60, -62, 2), apply_signal_hysteresis(-60, -63, 2)
+        (-60, -63)
+        >>> apply_signal_hysteresis(-60, None, 2) is None
+        True
+    """
+    if reported is None or measured is None:
+        return measured
+    if abs(measured - reported) > max(threshold, 0):
+        return measured
+    return reported
+
+
 def estimate_transfer_bytes(rate_kib_s: int | None, elapsed_seconds: float) -> float:
     """Estimate transferred bytes from one valid instantaneous MW6 rate sample.
 

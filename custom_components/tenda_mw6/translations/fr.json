@@ -28,13 +28,15 @@
   "options": {
     "step": {
       "init": {
-        "title": "Correspondance des appareils",
-        "description": "L'intégration a listé tous les appareils actuellement connus de la borne. Chaque ligne contient son IP, sa MAC et son nom. Modifiez le texte après le signe =. Laissez-le vide pour afficher l'IP.",
+        "title": "Noms des appareils et signal",
+        "description": "L'intégration a listé tous les appareils actuellement connus de la borne. Chaque ligne contient son IP, sa MAC et son nom. Modifiez le texte après le signe =. Laissez-le vide pour afficher l'IP.\n\nEn dessous, l'hystérésis du signal limite la fréquence de changement des capteurs Signal.",
         "data": {
-          "device_aliases": "IP | MAC = nom"
+          "device_aliases": "IP | MAC = nom",
+          "signal_hysteresis": "Hystérésis du signal"
         },
         "data_description": {
-          "device_aliases": "Conservez l'IP et la MAC. Un nom vide après le = force l'affichage de l'IP. Supprimer la ligne entière restaure le nom signalé par la borne."
+          "device_aliases": "Conservez l'IP et la MAC. Un nom vide après le = force l'affichage de l'IP. Supprimer la ligne entière restaure le nom signalé par la borne.",
+          "signal_hysteresis": "Le bruit radio fait varier le signal d'un client immobile de 1 ou 2 dBm d'un relevé à l'autre, et Home Assistant enregistre chaque changement dans sa base. Un capteur Signal ne change que si la valeur mesurée s'écarte de la valeur affichée de plus de ce nombre de dBm. Avec 2, environ 70 % de ces écritures disparaissent, au prix d'une valeur affichée qui peut avoir jusqu'à 2 dBm d'écart. 0 désactive l'hystérésis (chaque changement est enregistré). La perte ou le retour d'un signal sont toujours affichés tout de suite. Les capteurs des bornes gardent la valeur exacte."
         }
       }
     },

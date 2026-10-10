@@ -28,13 +28,15 @@
   "options": {
     "step": {
       "init": {
-        "title": "Device map",
-        "description": "The integration listed every device currently known to the router. Each line contains its IP, MAC and name. Edit the text after =. Leave it empty to display the IP.",
+        "title": "Device names and signal",
+        "description": "The integration listed every device currently known to the router. Each line contains its IP, MAC and name. Edit the text after =. Leave it empty to display the IP.\n\nBelow, the signal hysteresis limits how often the Signal sensors change.",
         "data": {
-          "device_aliases": "IP | MAC = name"
+          "device_aliases": "IP | MAC = name",
+          "signal_hysteresis": "Signal hysteresis"
         },
         "data_description": {
-          "device_aliases": "Keep the IP and MAC. An empty name after = forces the IP to be displayed. Removing the entire line restores the name reported by the router."
+          "device_aliases": "Keep the IP and MAC. An empty name after = forces the IP to be displayed. Removing the entire line restores the name reported by the router.",
+          "signal_hysteresis": "Radio noise makes a steady client's signal move by 1 or 2 dBm from one poll to the next, and Home Assistant stores every change in its database. A Signal sensor only changes when the measured value differs from the displayed one by more than this many dBm. 2 removes about 70 % of these writes, at the cost of a displayed value that may be up to 2 dBm off. 0 disables the hysteresis (every change is recorded). Losing or regaining a signal is always shown at once. Node sensors keep the exact value."
         }
       }
     },

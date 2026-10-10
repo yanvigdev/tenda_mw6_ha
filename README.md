@@ -56,8 +56,17 @@ accumulated transfer — all inside Home Assistant, with a bundled Lovelace card
 | `port` | Local service port | `9000` |
 | `serial` | A node's serial number (`qrmsg` field) | `E00000000000000000` |
 
-Device names can be customized through the integration **options**
-(`IP | MAC = name` mapping).
+The integration **options** (Settings → Devices & services → Tenda MW6 →
+Configure) hold two settings; saving them reloads the integration:
+
+- **Device names**: an `IP | MAC = name` mapping.
+- **Signal hysteresis** (dBm, default **2**, 0 to 10): radio noise moves a steady
+  client's signal by 1-2 dBm between polls, and Home Assistant stores every change.
+  A client Signal sensor only changes when the measurement differs from the displayed
+  value by more than this many dBm. On a real mesh, 2 removed about 70 % of these
+  writes; the displayed value may then be up to 2 dBm off. `0` disables it. Losing or
+  regaining a signal is always shown at once; node sensors keep the exact value. The
+  topology card's median reads the client sensors, so it follows the smoothed values.
 
 ## The Lovelace card
 
