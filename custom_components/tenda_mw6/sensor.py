@@ -15,9 +15,18 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from . import DOMAIN
-from .api import TendaMW6Client, TendaMW6NodeSummary, estimate_transfer_bytes
+from .api import (
+    TendaMW6Client,
+    TendaMW6NodeSummary,
+    client_connection_type,
+    estimate_transfer_bytes,
+)
 from .coordinator import MAX_TRANSFER_SAMPLE_GAP_SECONDS, TendaMW6Coordinator
+from .entity_naming import client_object_id
 from .node_identity import node_device_identifier, node_sn_from_device_identifier
+
+# Connection types reported by the ENUM sensor; translated in translations/*.json.
+CONNECTION_TYPE_OPTIONS = ["wifi", "wired"]
 
 
 async def async_setup_entry(
@@ -52,20 +61,23 @@ async def async_setup_entry(
             if not mac or mac in known_macs:
                 continue
             known_macs.add(mac)
+            # The display name only seeds the suggested entity id of a client
+            # seen for the first time; the registry keeps ids already assigned.
+            name = coordinator.client_display_name(client)
             entities.extend(
                 (
-                    TendaMW6ClientSignalSensor(coordinator, entry, mac),
-                    TendaMW6ClientIpSensor(coordinator, entry, mac),
-                    TendaMW6ClientAccessSensor(coordinator, entry, mac),
-                    TendaMW6ClientNodeSensor(coordinator, entry, mac),
-                    TendaMW6ClientRateSensor(coordinator, entry, mac, "upload"),
-                    TendaMW6ClientRateSensor(coordinator, entry, mac, "download"),
-                    TendaMW6ClientTransferSensor(coordinator, entry, mac, "upload", "total"),
-                    TendaMW6ClientTransferSensor(coordinator, entry, mac, "download", "total"),
-                    TendaMW6ClientTransferSensor(coordinator, entry, mac, "upload", "day"),
-                    TendaMW6ClientTransferSensor(coordinator, entry, mac, "download", "day"),
-                    TendaMW6ClientTransferSensor(coordinator, entry, mac, "upload", "month"),
-                    TendaMW6ClientTransferSensor(coordinator, entry, mac, "download", "month"),
+                    TendaMW6ClientSignalSensor(coordinator, entry, mac, name),
+                    TendaMW6ClientIpSensor(coordinator, entry, mac, name),
+                    TendaMW6ClientAccessSensor(coordinator, entry, mac, name),
+                    TendaMW6ClientNodeSensor(coordinator, entry, mac, name),
+                    TendaMW6ClientRateSensor(coordinator, entry, mac, name, "upload"),
+                    TendaMW6ClientRateSensor(coordinator, entry, mac, name, "download"),
+                    TendaMW6ClientTransferSensor(coordinator, entry, mac, name, "upload", "total"),
+                    TendaMW6ClientTransferSensor(coordinator, entry, mac, name, "download", "total"),
+                    TendaMW6ClientTransferSensor(coordinator, entry, mac, name, "upload", "day"),
+                    TendaMW6ClientTransferSensor(coordinator, entry, mac, name, "download", "day"),
+                    TendaMW6ClientTransferSensor(coordinator, entry, mac, name, "upload", "month"),
+                    TendaMW6ClientTransferSensor(coordinator, entry, mac, name, "download", "month"),
                 )
             )
 
@@ -175,18 +187,18 @@ class TendaMW6InventoryHealthSensor(CoordinatorEntity[TendaMW6Coordinator], Sens
         return "all_reported_offline" if summary.all_reported_offline else "reporting"
 
     @property
-    def extra_state_attributes(self) -> dict[str, int | bool | str | None]:
+    def extra_state_attributes(self) -> dict[str, int | bool]:
+        # Only counters that change when the inventory changes: an attribute
+        # rewritten on every poll (such as a timestamp) would make the recorder
+        # store one state row per poll. The entity's last_updated already tells
+        # when the mesh was last read successfully.
         summary = self.coordinator.inventory_summary
-        last_reported_online_at = self.coordinator.last_reported_online_at
         return {
             "total_clients": summary.total_clients,
             "reported_online": summary.reported_online,
             "reported_offline": summary.reported_offline,
             "unknown_online_state": summary.unknown_online_state,
             "all_reported_offline": summary.all_reported_offline,
-            "last_reported_online_at": (
-                last_reported_online_at.isoformat() if last_reported_online_at else None
-            ),
         }
 
     @property
@@ -290,7 +302,14 @@ class TendaMW6AggregateSensorBase(CoordinatorEntity[TendaMW6Coordinator], Sensor
 
 
 class TendaMW6AggregateRateSensor(TendaMW6AggregateSensorBase):
-    """Current sum of rates reported by all online MW6 clients."""
+    """Current sum of rates reported by all online MW6 clients.
+
+    Disabled by default: a mesh in bridge mode reports a zero rate for every
+    client, so the sensor would only ever show 0. Enable it once
+    ``Transfer counting health`` reports ``rate_observed``.
+    """
+
+    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self,
@@ -324,8 +343,14 @@ class TendaMW6AggregateRateSensor(TendaMW6AggregateSensorBase):
 
 
 class TendaMW6AggregateTransferSensor(TendaMW6AggregateSensorBase, RestoreEntity):
-    """Locally accumulated transfer across all online MW6 clients."""
+    """Locally accumulated transfer across all online MW6 clients.
 
+    Disabled by default for the same reason as the aggregate rate sensor; as a
+    ``TOTAL_INCREASING`` sensor it would otherwise feed long-term statistics
+    with a flat zero every 5 minutes.
+    """
+
+    _attr_entity_registry_enabled_default = False
     _attr_device_class = SensorDeviceClass.DATA_SIZE
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_native_unit_of_measurement = UnitOfInformation.MEGABYTES
@@ -473,7 +498,14 @@ class TendaMW6QosSensor(TendaMW6AggregateSensorBase):
 
 
 class TendaMW6ClientSensorBase(CoordinatorEntity[TendaMW6Coordinator], SensorEntity):
-    """Base sensor for one MW6 client."""
+    """Base sensor for one MW6 client.
+
+    ``suffix`` names the metric and is used both in the unique id
+    (``<entry>_<mac>_<suffix>``) and in the suggested entity id
+    (``sensor.tenda_mw6_<display name>_<suffix>``). The suggestion only applies
+    to a client registered for the first time: Home Assistant keeps the entity id
+    already stored in its registry, so existing dashboards are unaffected.
+    """
 
     _attr_has_entity_name = True
 
@@ -482,10 +514,14 @@ class TendaMW6ClientSensorBase(CoordinatorEntity[TendaMW6Coordinator], SensorEnt
         coordinator: TendaMW6Coordinator,
         entry: ConfigEntry,
         mac: str,
+        display_name: str,
+        suffix: str,
     ) -> None:
         super().__init__(coordinator)
         self._entry = entry
         self._mac = mac.lower()
+        self._attr_unique_id = f"{entry.entry_id}_{self._mac}_{suffix}"
+        self.entity_id = f"sensor.{client_object_id(display_name, self._mac, suffix)}"
 
     @property
     def _client(self) -> TendaMW6Client | None:
@@ -531,20 +567,27 @@ class TendaMW6ClientSensorBase(CoordinatorEntity[TendaMW6Coordinator], SensorEnt
 
 
 class TendaMW6ClientSignalSensor(TendaMW6ClientSensorBase):
-    """Signal sensor for one MW6 client."""
+    """Signal sensor for one MW6 client.
+
+    Attributes are limited to values that change only when the client itself
+    changes (address, name, node, connection type, reported online state). The
+    per-poll firmware fields (``condition_time``, raw rates) used to be exposed
+    here, which made the recorder store one state row per poll and per client
+    even with a steady signal.
+    """
 
     _attr_icon = "mdi:wifi"
     _attr_native_unit_of_measurement = "dBm"
+    _attr_name = "Signal"
 
     def __init__(
         self,
         coordinator: TendaMW6Coordinator,
         entry: ConfigEntry,
         mac: str,
+        display_name: str,
     ) -> None:
-        super().__init__(coordinator, entry, mac)
-        self._attr_unique_id = f"{entry.entry_id}_{self._mac}_signal"
-        self._attr_name = "Signal"
+        super().__init__(coordinator, entry, mac, display_name, "signal")
 
     @property
     def native_value(self) -> int | None:
@@ -557,22 +600,6 @@ class TendaMW6ClientSignalSensor(TendaMW6ClientSensorBase):
         if client is None:
             return {"mac": self._mac}
 
-        attrs: dict[str, Any] = {
-            **self.client_identity_attributes,
-            "tenda_mw6_metric": "signal",
-            "ip": client.ip,
-            "mac": client.mac,
-            "name": client.name,
-            "node_sn": client.node_sn,
-            "signal": client.signal,
-            "access": client.access,
-            "condition_time": client.condition_time,
-        }
-
-        # These values are kept as diagnostics only. The firmware schema names
-        # them online/uprate/downrate, but live MW6 tests observed zero values
-        # even for an active client. Do not expose them as authoritative HA state.
-        summary = self.coordinator.inventory_summary
         if client.raw_online is None:
             inventory_state = "unknown"
         elif client.raw_online == 0:
@@ -580,15 +607,16 @@ class TendaMW6ClientSignalSensor(TendaMW6ClientSensorBase):
         else:
             inventory_state = "reported_online"
 
-        attrs["raw_online"] = client.raw_online
-        attrs["raw_uprate"] = client.raw_uprate
-        attrs["raw_downrate"] = client.raw_downrate
-        attrs["inventory_state"] = inventory_state
-        attrs["inventory_all_reported_offline"] = summary.all_reported_offline
-        attrs["rate_data_reliable"] = (
-            client.raw_online not in (None, 0) and not summary.all_reported_offline
-        )
-        return attrs
+        return {
+            **self.client_identity_attributes,
+            "tenda_mw6_metric": "signal",
+            "ip": client.ip,
+            "mac": client.mac,
+            "name": client.name,
+            "node_sn": client.node_sn,
+            "connection_type": client_connection_type(client),
+            "inventory_state": inventory_state,
+        }
 
 
 class TendaMW6ClientIpSensor(TendaMW6ClientSensorBase):
@@ -596,16 +624,16 @@ class TendaMW6ClientIpSensor(TendaMW6ClientSensorBase):
 
     _attr_icon = "mdi:ip-network"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_name = "IP address"
 
     def __init__(
         self,
         coordinator: TendaMW6Coordinator,
         entry: ConfigEntry,
         mac: str,
+        display_name: str,
     ) -> None:
-        super().__init__(coordinator, entry, mac)
-        self._attr_unique_id = f"{entry.entry_id}_{self._mac}_ip"
-        self._attr_name = "IP address"
+        super().__init__(coordinator, entry, mac, display_name, "ip")
 
     @property
     def native_value(self) -> str | None:
@@ -614,42 +642,55 @@ class TendaMW6ClientIpSensor(TendaMW6ClientSensorBase):
 
 
 class TendaMW6ClientAccessSensor(TendaMW6ClientSensorBase):
-    """Connection type reported verbatim by the MW6 firmware."""
+    """Connection type of one MW6 client: ``wifi`` or ``wired``.
+
+    Derived by :func:`client_connection_type` (firmware ``access`` field when
+    present, otherwise the presence of a signal). ENUM sensor so the options are
+    translated and usable in automations; unknown for an offline client.
+    """
 
     _attr_icon = "mdi:lan-connect"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = CONNECTION_TYPE_OPTIONS
+    _attr_translation_key = "connection_type"
 
     def __init__(
         self,
         coordinator: TendaMW6Coordinator,
         entry: ConfigEntry,
         mac: str,
+        display_name: str,
     ) -> None:
-        super().__init__(coordinator, entry, mac)
-        self._attr_unique_id = f"{entry.entry_id}_{self._mac}_connection_type"
-        self._attr_name = "Connection type"
+        super().__init__(coordinator, entry, mac, display_name, "connection_type")
 
     @property
     def native_value(self) -> str | None:
         client = self._client
-        return client.access or None if client is not None else None
+        return client_connection_type(client) if client is not None else None
 
 
 class TendaMW6ClientRateSensor(TendaMW6ClientSensorBase):
-    """Fresh instantaneous rate reported by the MW6 HostList."""
+    """Fresh instantaneous rate reported by the MW6 HostList.
+
+    Disabled by default: a mesh in bridge mode reports 0 for every client (see
+    ``Transfer counting health``); enable it when ``rate_observed`` shows up.
+    """
+
+    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self,
         coordinator: TendaMW6Coordinator,
         entry: ConfigEntry,
         mac: str,
+        display_name: str,
         direction: str,
     ) -> None:
-        super().__init__(coordinator, entry, mac)
+        super().__init__(coordinator, entry, mac, display_name, f"{direction}_rate")
         self._direction = direction
         self._attr_icon = "mdi:upload-network" if direction == "upload" else "mdi:download-network"
         self._attr_native_unit_of_measurement = "KiB/s"
-        self._attr_unique_id = f"{entry.entry_id}_{self._mac}_{direction}_rate"
         self._attr_name = f"{direction.title()} rate"
 
     def _rate_kib_s(self) -> int | None:
@@ -681,8 +722,14 @@ class TendaMW6ClientRateSensor(TendaMW6ClientSensorBase):
 
 
 class TendaMW6ClientTransferSensor(TendaMW6ClientSensorBase, RestoreEntity):
-    """Locally accumulated transfer from valid MW6 instantaneous-rate samples."""
+    """Locally accumulated transfer from valid MW6 instantaneous-rate samples.
 
+    Disabled by default, like the rate sensor it integrates: six of them per
+    client feeding long-term statistics with zeros is the main database cost of
+    the integration on a bridged mesh.
+    """
+
+    _attr_entity_registry_enabled_default = False
     _attr_device_class = SensorDeviceClass.DATA_SIZE
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_native_unit_of_measurement = UnitOfInformation.MEGABYTES
@@ -693,10 +740,13 @@ class TendaMW6ClientTransferSensor(TendaMW6ClientSensorBase, RestoreEntity):
         coordinator: TendaMW6Coordinator,
         entry: ConfigEntry,
         mac: str,
+        display_name: str,
         direction: str,
         period: str,
     ) -> None:
-        super().__init__(coordinator, entry, mac)
+        super().__init__(
+            coordinator, entry, mac, display_name, f"{direction}_transfer_{period}"
+        )
         self._direction = direction
         self._period = period
         self._total_bytes = 0.0
@@ -705,7 +755,6 @@ class TendaMW6ClientTransferSensor(TendaMW6ClientSensorBase, RestoreEntity):
         self._last_rate_kib_s: int | None = None
         self._has_valid_sample = False
         period_suffix = {"total": "", "day": " today", "month": " this month"}[period]
-        self._attr_unique_id = f"{entry.entry_id}_{self._mac}_{direction}_transfer_{period}"
         self._attr_name = f"{direction.title()} transfer{period_suffix}"
 
     async def async_added_to_hass(self) -> None:
@@ -811,16 +860,16 @@ class TendaMW6ClientNodeSensor(TendaMW6ClientSensorBase):
 
     _attr_icon = "mdi:access-point-network"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_name = "Mesh node"
 
     def __init__(
         self,
         coordinator: TendaMW6Coordinator,
         entry: ConfigEntry,
         mac: str,
+        display_name: str,
     ) -> None:
-        super().__init__(coordinator, entry, mac)
-        self._attr_unique_id = f"{entry.entry_id}_{self._mac}_node"
-        self._attr_name = "Mesh node"
+        super().__init__(coordinator, entry, mac, display_name, "node")
 
     @property
     def native_value(self) -> str | None:
