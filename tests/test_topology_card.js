@@ -107,6 +107,35 @@ assert.deepEqual(topo.orphans, []);
 topo = model.mw6tBuildTopology(states, entities, devices, areas, { entryId: "entry", weakOnly: true, weakThreshold: -80 });
 assert.deepEqual(topo.nodes[0].clients, []);
 
+// Connection filters: wired keeps only online clients without signal, wifi only those with one.
+topo = model.mw6tBuildTopology(states, entities, devices, areas, { entryId: "entry", connection: "wired" });
+assert.deepEqual(names(topo.nodes[0].clients), ["NAS"]);
+assert.deepEqual(topo.orphans, []);
+topo = model.mw6tBuildTopology(states, entities, devices, areas, { entryId: "entry", connection: "wifi" });
+assert.deepEqual(names(topo.nodes[0].clients), ["Phone", "Relay"]);
+assert.deepEqual(names(topo.orphans), ["Lost"]);
+// An offline client has no known connection type: hidden by both filters, even with showOffline.
+topo = model.mw6tBuildTopology(states, entities, devices, areas, { entryId: "entry", connection: "wired", showOffline: true });
+assert.deepEqual(topo.nodes[1].clients, []);
+// Unknown filter value behaves like "all".
+topo = model.mw6tBuildTopology(states, entities, devices, areas, { entryId: "entry", connection: "bogus" });
+assert.deepEqual(names(topo.nodes[0].clients), ["Phone", "Relay", "NAS"]);
+// Counters and median ignore the filters.
+assert.equal(topo.nodes[0].online, 3);
+
+// Median signal of the online Wi-Fi clients of a node; null without any.
+topo = model.mw6tBuildTopology(states, entities, devices, areas, { entryId: "entry", connection: "wired" });
+assert.equal(topo.nodes[0].medianSignal, -60); // (-45 + -75) / 2
+assert.equal(topo.nodes[1].medianSignal, null);
+// The orphans' median ignores the filters too (Lost, -50, hidden by the wired filter).
+assert.deepEqual(topo.orphans, []);
+assert.equal(topo.orphansMedianSignal, -50);
+assert.equal(model.mw6tMedian([]), null);
+assert.equal(model.mw6tMedian([-70]), -70);
+assert.equal(model.mw6tMedian([-50, -80, -60]), -60);
+assert.equal(model.mw6tMedian([-61, -62]), -62); // -61.5 rounded toward the weaker value
+assert.equal(model.mw6tMedian([-40, -50, -60, -70]), -55);
+
 // Without entryId, both meshes are merged; with another entryId, nothing of the first one leaks.
 topo = model.mw6tBuildTopology(states, entities, devices, areas, {});
 assert.deepEqual(names(topo.nodes[0].clients), ["Other", "Phone", "Relay", "NAS"]);
@@ -117,7 +146,7 @@ assert.deepEqual(names(topo.orphans), ["Other"]);
 
 // Missing hass collections never throw.
 topo = model.mw6tBuildTopology(undefined, undefined, undefined, undefined, undefined);
-assert.deepEqual(topo, { nodes: [], orphans: [] });
+assert.deepEqual(topo, { nodes: [], orphans: [], orphansMedianSignal: null });
 
 // Signal levels.
 assert.equal(model.mw6tSignalLevel({ online: true, signal: null, wired: true }, -70), "wired");
@@ -140,7 +169,7 @@ function makeCard(config, hass, settings) {
   const card = Object.create(Card.prototype);
   card._config = config || {};
   card._hass = hass;
-  card._settings = Object.assign({ showOffline: false, weakOnly: false }, settings || {});
+  card._settings = Object.assign({ showOffline: false, weakOnly: false, connection: "all" }, settings || {});
   return card;
 }
 
@@ -162,6 +191,32 @@ html = makeCard({ entry_id: "entry", title: "Maison" }, hass, { weakOnly: true }
 assert.match(html, /Maison/);
 assert.match(html, /data-setting="weakOnly" checked/);
 assert.doesNotMatch(html, /Phone/);
+
+// Median shown in the node header with its level; absent for a node without Wi-Fi client.
+html = makeCard({ entry_id: "entry" }, hass)._html();
+assert.match(html, /Médiane : -60 dBm/);
+assert.match(html, /class="median"><span class="dot good"><\/span>/);
+assert.equal((html.match(/Médiane :/g) || []).length, 2); // salon + orphans, not the cave
+
+// Connection toggles: rendered, exclusive state reflected, filter applied.
+assert.match(html, /data-connection="wired"/);
+assert.match(html, /data-connection="wifi"/);
+assert.match(html, /Filaire seulement/);
+assert.match(html, /Sans fil seulement/);
+html = makeCard({ entry_id: "entry" }, hass, { connection: "wired" })._html();
+assert.match(html, /data-connection="wired" checked/);
+assert.doesNotMatch(html, /data-connection="wifi" checked/);
+assert.match(html, /NAS/);
+assert.doesNotMatch(html, />Phone</);
+html = makeCard({ entry_id: "entry" }, hass, { connection: "wifi" })._html();
+assert.doesNotMatch(html, />NAS</);
+assert.match(html, />Phone</);
+
+// Exclusive toggling: checking one clears the other, unchecking returns to "all".
+assert.equal(model.mw6tNextConnection("all", "wired", true), "wired");
+assert.equal(model.mw6tNextConnection("wired", "wifi", true), "wifi");
+assert.equal(model.mw6tNextConnection("wifi", "wifi", false), "all");
+assert.equal(model.mw6tNextConnection("wired", "wifi", false), "wired");
 
 // A hostile DHCP name is rendered as text, never as markup.
 const hostile = Object.assign({}, states, clientStates(

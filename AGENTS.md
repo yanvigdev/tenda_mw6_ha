@@ -35,7 +35,7 @@ Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
     attribute change, i.e. one per poll and per entity.
   - `tenda-mw6-card.js`: Lovelace card (English labels, hardcoded).
   - `tenda-mw6-topology-card.js`: topology card (one column per node). Pure model
-    (`mw6tBuildTopology`, `mw6tSignalLevel`, ...) exported via `module.exports` for
+    (`mw6tBuildTopology`, `mw6tSignalLevel`, `mw6tMedian`, `mw6tNextConnection`, ...) exported via `module.exports` for
     Node tests; labels EN/FR/PL from `hass.language`. Both card files are served by
     `__init__.py` (`FRONTEND_FILES`).
   - Node devices: `api.summarize_nodes()` → `coordinator.node_summaries` →
@@ -88,6 +88,11 @@ adding a test file or a card.
   `month`, `MB`, `GB`): **do not translate** (logic / localStorage keys); only
   visible labels are text.
 - Read-only only: never send a write/bind/set command to the router.
+- Topology card filters: `showOffline`, `weakOnly` (independent) and `connection`
+  (`all`/`wifi`/`wired`, two exclusive checkboxes, `mw6tNextConnection`), saved in
+  localStorage `tenda-mw6-topology-card:settings`. Node `online`/`total`/`medianSignal`
+  ignore the filters (orphans: `orphansMedianSignal`). When the card file changes, bump
+  `MW6T_CARD_VERSION` and the `?v=` of the Lovelace resource (browser cache).
 - Topology card: every top-level identifier is prefixed `mw6t` / `MW6T_`. HA loads
   both cards as ES modules (separate scopes); the prefix guards against a classic
   script load, where a duplicated top-level `const` would throw. Node sensors carry `tenda_mw6_node: true`, `tenda_mw6_metric`
