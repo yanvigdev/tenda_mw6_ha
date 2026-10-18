@@ -83,8 +83,6 @@ adding a test file or a card.
 
 - `main`: this fork's code (default branch; HACS installs the release tags `vX.Y.Z`).
   Upstream code is reachable through the `upstream` remote (`upstream/main` = `4cfdcb0`).
-- `serial-auth-fr`: former development branch, kept on GitHub for old links; same
-  history as `main`, do not commit to it.
 - `upstream-serial-auth`, `upstream-qos`: minimal branches on top of `upstream/main`
   for upstream contributions (texts in the project's `contrib/`). Keep them free of
   fork-only features.
