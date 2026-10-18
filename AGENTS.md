@@ -1,6 +1,7 @@
 # AGENTS.md — Tenda MW6 Home Assistant integration fork
 
-Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
+Fork of `kamiljaworski88/tenda_mw6_ha`, maintained independently since 2026-10-18
+(upstream silent on issue #1 / PR #2). Fork goal: local authentication via a
 **serial number** (`qrmsg` field of the TCP/9000 LoginMsg) instead of the 32-hex
 "account", to avoid any packet capture. The integration is **local, read-only**.
 
@@ -77,6 +78,20 @@ CI (GitHub Actions, free on this public fork): `.github/workflows/python-smoke.y
 runs all of the above on every push/PR touching code or tests;
 `validate-hacs.yml` validates the HACS layout. Keep the workflow in sync when
 adding a test file or a card.
+
+## Branches and license
+
+- `main`: this fork's code (default branch; HACS installs the release tags `vX.Y.Z`).
+  Upstream code is reachable through the `upstream` remote (`upstream/main` = `4cfdcb0`).
+- `serial-auth-fr`: former development branch, kept on GitHub for old links; same
+  history as `main`, do not commit to it.
+- `upstream-serial-auth`, `upstream-qos`: minimal branches on top of `upstream/main`
+  for upstream contributions (texts in the project's `contrib/`). Keep them free of
+  fork-only features.
+- **Do not add a `LICENSE` file**: upstream has no license and about half of the code
+  is still upstream's, so this fork cannot license it. Consequence: the HACS
+  `license` check fails and the default HACS store is out of reach (custom
+  repository only). Adopt upstream's license if it adds one.
 
 ## Deployment (containerized Home Assistant)
 

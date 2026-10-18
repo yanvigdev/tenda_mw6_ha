@@ -2,7 +2,8 @@
 
 *English · [Français](README.fr.md)*
 
-Fork of [`kamiljaworski88/tenda_mw6_ha`](https://github.com/kamiljaworski88/tenda_mw6_ha).
+Based on [`kamiljaworski88/tenda_mw6_ha`](https://github.com/kamiljaworski88/tenda_mw6_ha)
+and now maintained independently (see [Project status](#project-status)).
 
 This fork replaces the original authentication (a 32 hex-character "account",
 which required a **packet capture** of the official app's traffic) with a much
@@ -29,6 +30,18 @@ accumulated transfer — all inside Home Assistant, with a bundled Lovelace card
   e.g. `E00000000000000000`). Any serial from the mesh works.
 
 ## Installation
+
+### With HACS (custom repository)
+
+1. **HACS → ⋮ → Custom repositories**: add `https://github.com/yanvigdev/tenda_mw6_ha`,
+   category **Integration**.
+2. Install **Tenda MW6** (HACS picks the latest release), then restart Home Assistant.
+3. Add the integration as described in step 3 below.
+
+The integration is not listed in the default HACS store: that requires a license,
+see [License](#license).
+
+### Manually
 
 1. Copy the `custom_components/tenda_mw6/` folder into Home Assistant's
    `config/custom_components/` folder.
@@ -221,7 +234,27 @@ local master node.
 - Protocol validated on firmware returning `GET_STA = 000000000803`
   (compatible with `V1.0.0.32(9821)` from the original reverse engineering).
 
+## Project status
+
+This repository started as a fork meant to contribute back to
+`kamiljaworski88/tenda_mw6_ha`. The changes were offered upstream on 2026-10-04
+(issue #1: serial-number authentication; PR #2: QoS sensors) and have had no
+reply so far, so development continues here. `main` is this fork's code; the
+upstream code stays available from the original repository.
+
+The branches `upstream-serial-auth` and `upstream-qos` are kept small and based on
+upstream `main`, ready to be merged upstream if the maintainer is interested.
+
+## License
+
+The upstream repository has **no license**. Its code is therefore
+"all rights reserved" by its author, and a large part of this integration still
+comes from it. This fork cannot grant a license on that code, so it ships **no
+`LICENSE` file** for now. A license has been requested upstream; if one is added,
+this repository will adopt the same one.
+
 ## Credits
 
 Reverse engineering and integration base: `kamiljaworski88/tenda_mw6_ha` and
-`latonita/tenda-reverse`. This fork adds serial-number authentication.
+`latonita/tenda-reverse`. This fork adds serial-number authentication, node
+devices, the topology card and a lighter recorder footprint.

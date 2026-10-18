@@ -2,7 +2,8 @@
 
 *[English](README.md) · Français*
 
-Fork de [`kamiljaworski88/tenda_mw6_ha`](https://github.com/kamiljaworski88/tenda_mw6_ha).
+Basé sur [`kamiljaworski88/tenda_mw6_ha`](https://github.com/kamiljaworski88/tenda_mw6_ha)
+et désormais maintenu de façon indépendante (voir [État du projet](#état-du-projet)).
 
 Ce fork remplace l'authentification d'origine (« account » de 32 caractères
 hexadécimaux, qui imposait une **capture réseau** du trafic de l'application
@@ -31,6 +32,18 @@ Assistant, avec une carte Lovelace fournie.
   ex. `E00000000000000000`). N'importe quel SN du mesh fonctionne.
 
 ## Installation
+
+### Avec HACS (dépôt personnalisé)
+
+1. **HACS → ⋮ → Dépôts personnalisés** : ajouter `https://github.com/yanvigdev/tenda_mw6_ha`,
+   catégorie **Intégration**.
+2. Installer **Tenda MW6** (HACS prend la dernière release), puis redémarrer Home Assistant.
+3. Ajouter l'intégration comme décrit à l'étape 3 ci-dessous.
+
+L'intégration n'est pas listée dans le catalogue HACS par défaut : il faudrait
+une licence, voir [Licence](#licence).
+
+### À la main
 
 1. Copier le dossier `custom_components/tenda_mw6/` dans le dossier
    `config/custom_components/` de Home Assistant.
@@ -234,7 +247,27 @@ contre le nœud maître local.
 - Protocole validé sur le firmware renvoyant `GET_STA = 000000000803`
   (compatible avec `V1.0.0.32(9821)` de la rétro-ingénierie d'origine).
 
+## État du projet
+
+Ce dépôt est né comme un fork destiné à contribuer à
+`kamiljaworski88/tenda_mw6_ha`. Les modifications ont été proposées à l'amont
+le 2026-10-04 (issue #1 : authentification par numéro de série ; PR #2 : capteurs
+QoS) et sont restées sans réponse ; le développement continue donc ici. `main`
+contient le code de ce fork ; le code amont reste disponible dans le dépôt d'origine.
+
+Les branches `upstream-serial-auth` et `upstream-qos` restent courtes et basées sur
+le `main` amont, prêtes à être fusionnées si le mainteneur est intéressé.
+
+## Licence
+
+Le dépôt amont n'a **aucune licence** : son code est donc « tous droits réservés »
+par son auteur, et une bonne partie de cette intégration en provient encore. Ce fork
+ne peut pas accorder de licence sur ce code ; il ne contient donc **pas de fichier
+`LICENSE`** pour l'instant. Une licence a été demandée à l'amont ; si elle est
+ajoutée, ce dépôt adoptera la même.
+
 ## Crédits
 
 Rétro-ingénierie et base d'intégration : `kamiljaworski88/tenda_mw6_ha` et
-`latonita/tenda-reverse`. Ce fork ajoute l'authentification par numéro de série.
+`latonita/tenda-reverse`. Ce fork ajoute l'authentification par numéro de série,
+les bornes en appareils, la carte topologie et une empreinte réduite dans l'historique.
