@@ -68,6 +68,9 @@
       "node_weakest_signal": {
         "name": "Najsłabszy sygnał"
       },
+      "node_median_signal": {
+        "name": "Mediana sygnału"
+      },
       "connection_type": {
         "name": "Typ połączenia",
         "state": {

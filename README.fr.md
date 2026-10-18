@@ -96,8 +96,10 @@ type: custom:tenda-mw6-card
 ## La carte topologie
 
 Chaque borne du mesh est exposée comme un appareil Home Assistant (« Tenda MW6 node
-…1234 ») avec trois capteurs : clients connectés, clients Wi-Fi et signal le plus
-faible. Ils sont calculés uniquement à partir de la liste des clients ; aucune commande
+…1234 ») avec quatre capteurs : clients connectés, clients Wi-Fi, signal le plus
+faible et signal médian (médiane des clients Wi-Fi en ligne, la même valeur que dans
+l'en-tête de la carte, enregistrée pour garder un historique de la qualité de réception
+de chaque borne). Ils sont calculés uniquement à partir de la liste des clients ; aucune commande
 supplémentaire n'est envoyée aux bornes. Renommez chaque borne et attribuez-lui une
 pièce dans **Paramètres → Appareils et services → Appareils** : la carte reprend ce nom
 et cette pièce.
@@ -153,7 +155,8 @@ diagnostic — les **plafonds QoS globaux** (`QoS upload cap` /
 confirmée).
 
 Par borne du mesh (un appareil par borne) : clients connectés (total en
-attribut), clients Wi-Fi et signal le plus faible (client concerné en attribut),
+attribut), clients Wi-Fi, signal le plus faible (client concerné en attribut) et
+signal médian des clients Wi-Fi en ligne (nombre pair : arrondi vers le plus faible),
 tous déduits de la liste des clients.
 
 Les identifiants des clients découverts depuis la 2.2.0 sont préfixés

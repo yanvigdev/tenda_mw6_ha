@@ -92,7 +92,9 @@ type: custom:tenda-mw6-card
 ## The topology card
 
 Each mesh node is exposed as a Home Assistant device ("Tenda MW6 node …1234") with
-three sensors: connected clients, Wi-Fi clients and weakest signal. They are computed
+four sensors: connected clients, Wi-Fi clients, weakest signal and median signal
+(median of the online Wi-Fi clients, the same value as the card header, recorded
+so the reception quality of each node has a history). They are computed
 from the client list only; no extra command is sent to the nodes. Rename each node and
 assign it an area from **Settings → Devices & services → Devices**: the card uses that
 name and area.
@@ -144,8 +146,9 @@ and transfers (disabled by default, same reason), and — as diagnostics — the
 `QOS_GET`; raw values, unit unconfirmed).
 
 Per mesh node (one device per node): connected clients (with the total in
-attributes), Wi-Fi clients and weakest signal (with the client concerned in
-attributes), all derived from the client list.
+attributes), Wi-Fi clients, weakest signal (with the client concerned in
+attributes) and median signal of the online Wi-Fi clients (even count: rounded
+toward the weaker value), all derived from the client list.
 
 Entity ids of clients discovered since 2.2.0 are prefixed
 `sensor.tenda_mw6_<name>_<metric>` (and `binary_sensor.tenda_mw6_<name>_online`)

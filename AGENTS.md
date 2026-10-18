@@ -46,7 +46,9 @@ Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
     `sensor.py` `TendaMW6Node*Sensor` (device id `(DOMAIN, f"{entry_id}:node:{sn}")`
     built by `node_identity.py`; parent hub set with `via_device_id` on the
     device registry, since `DeviceInfo.via_device` is deprecated). Derived from the client list
-    only. At setup, node devices already in the registry are recreated first, so a
+    only. Four sensors per node: `node_online`, `node_wifi`, `node_weakest_signal`,
+    `node_median_signal` (`api.median_signal()`, rounding identical to the card's
+    `mw6tMedian`: keep both in sync). At setup, node devices already in the registry are recreated first, so a
     node without clients keeps its entities across restarts.
   - `translations/`: `en.json`, `fr.json`, `pl.json`; `strings.json` = English
     source. Entity names and sort-option labels are localized here

@@ -106,6 +106,8 @@ class TendaMW6NodeSummary:
         wifi_clients: Online clients that report a signal (wired ones do not).
         weakest_signal: Lowest signal (dBm) among online Wi-Fi clients, or None.
         weakest_client_mac: MAC of the client with ``weakest_signal``, or None.
+        median_signal: Median signal (dBm) of the online Wi-Fi clients, computed by
+            ``median_signal`` like the topology card, or None without any.
     """
 
     node_sn: str
@@ -114,6 +116,39 @@ class TendaMW6NodeSummary:
     wifi_clients: int
     weakest_signal: int | None
     weakest_client_mac: str | None
+    median_signal: int | None
+
+
+def median_signal(signals: list[int]) -> int | None:
+    """Median of signals in dBm, as an integer, with the topology card's rounding.
+
+    With an even count, the mean of the two middle values is rounded down, i.e.
+    toward the weaker signal, so a borderline node is never reported better than it
+    is. Must stay identical to ``mw6tMedian`` in ``tenda-mw6-topology-card.js`` so the
+    sensor and the card header show the same value.
+
+    Example:
+        >>> median_signal([-50, -80, -60])
+        -60
+        >>> median_signal([-61, -62])  # -61.5 rounded toward the weaker value
+        -62
+        >>> median_signal([]) is None
+        True
+
+    Args:
+        signals: Signals in dBm; the list is not modified.
+
+    Returns:
+        The median, or None for an empty list.
+    """
+    if not signals:
+        return None
+    ordered = sorted(signals)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    # Floor division rounds toward negative infinity, like Math.floor in the card.
+    return (ordered[middle - 1] + ordered[middle]) // 2
 
 
 def summarize_nodes(clients: list[TendaMW6Client]) -> dict[str, TendaMW6NodeSummary]:
@@ -137,8 +172,8 @@ def summarize_nodes(clients: list[TendaMW6Client]) -> dict[str, TendaMW6NodeSumm
         >>> list(summaries)
         ['E00000000000000001']
         >>> node = summaries["E00000000000000001"]
-        >>> (node.online_clients, node.wifi_clients, node.weakest_signal)
-        (2, 1, -45)
+        >>> (node.online_clients, node.wifi_clients, node.weakest_signal, node.median_signal)
+        (2, 1, -45, -45)
 
     Args:
         clients: Client list decoded from MESH_HOSTS_GET.
@@ -165,6 +200,7 @@ def summarize_nodes(clients: list[TendaMW6Client]) -> dict[str, TendaMW6NodeSumm
             wifi_clients=len(wifi),
             weakest_signal=weakest.signal if weakest is not None else None,
             weakest_client_mac=weakest.mac if weakest is not None else None,
+            median_signal=median_signal([client.signal for client in wifi]),
         )
     return summaries
 

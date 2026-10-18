@@ -180,6 +180,9 @@ class NodeSummaryTest(unittest.TestCase):
         self.assertEqual(node.wifi_clients, 2)
         self.assertEqual(node.weakest_signal, -72)
         self.assertEqual(node.weakest_client_mac, "bb")
+        # Median of the online Wi-Fi signals only (-45, -72): -58.5 rounded down.
+        self.assertEqual(node.median_signal, -59)
+        self.assertEqual(summaries["SN2"].median_signal, -50)
 
     def test_offline_and_wired_clients_never_define_weakest_signal(self) -> None:
         summaries = API.summarize_nodes([
@@ -188,7 +191,15 @@ class NodeSummaryTest(unittest.TestCase):
         ])
         self.assertIsNone(summaries["SN1"].weakest_signal)
         self.assertIsNone(summaries["SN1"].weakest_client_mac)
+        self.assertIsNone(summaries["SN1"].median_signal)
         self.assertEqual(summaries["SN1"].wifi_clients, 0)
+
+    def test_median_signal_matches_card_rounding(self) -> None:
+        # Same cases as mw6tMedian in tests/test_topology_card.js.
+        self.assertEqual(API.median_signal([-50, -80, -60]), -60)
+        self.assertEqual(API.median_signal([-61, -62]), -62)
+        self.assertEqual(API.median_signal([-45, -75]), -60)
+        self.assertIsNone(API.median_signal([]))
 
     def test_clients_without_node_are_ignored(self) -> None:
         self.assertEqual(API.summarize_nodes([self.client("aa", "", 1, -40)]), {})

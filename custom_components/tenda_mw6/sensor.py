@@ -112,6 +112,7 @@ async def async_setup_entry(
                     TendaMW6NodeOnlineClientsSensor(coordinator, entry, node_sn),
                     TendaMW6NodeWifiClientsSensor(coordinator, entry, node_sn),
                     TendaMW6NodeWeakestSignalSensor(coordinator, entry, node_sn),
+                    TendaMW6NodeMedianSignalSensor(coordinator, entry, node_sn),
                 )
             )
 
@@ -1015,3 +1016,24 @@ class TendaMW6NodeWeakestSignalSensor(TendaMW6NodeSensorBase):
                 self.coordinator.client_display_name(client) if client is not None else None
             ),
         }
+
+
+class TendaMW6NodeMedianSignalSensor(TendaMW6NodeSensorBase):
+    """Median signal of the online Wi-Fi clients of one node, in dBm.
+
+    Same value as the median shown in the topology card header, but recorded by HA
+    (``MEASUREMENT``) so the reception quality of a node gets a long-term history.
+    Computed from the raw client signals (no hysteresis), like the other node
+    sensors; unknown when the node carries no online Wi-Fi client. No extra
+    attribute: only the value changes, so the recorder writes only real changes.
+    """
+
+    _metric = "node_median_signal"
+    _attr_icon = "mdi:wifi-strength-2"
+    _attr_native_unit_of_measurement = "dBm"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int | None:
+        summary = self._summary
+        return summary.median_signal if summary is not None else None
