@@ -69,8 +69,8 @@ Les **options** de l'intégration (Paramètres → Appareils et services → Ten
   réel, 2 a supprimé environ 70 % de ces écritures ; la valeur affichée peut alors
   avoir jusqu'à 2 dBm d'écart. `0` la désactive. La perte ou le retour d'un signal
   sont toujours affichés tout de suite ; les capteurs des bornes gardent la valeur
-  exacte. La médiane de la carte topologie lit les capteurs clients : elle suit les
-  valeurs lissées.
+  exacte, tout comme la médiane de la carte topologie, lue sur le capteur « Signal
+  médian » de la borne.
 
 ## La carte Lovelace
 
@@ -120,7 +120,9 @@ dessous, icône réseau pour les clients filaires. L'en-tête de chaque borne af
 le **signal médian** de ses clients Wi-Fi en ligne, avec la pastille de son niveau ; il
 décrit toute la borne et ignore les filtres, comme le compteur « en ligne » (pour un
 nombre pair, la moyenne des deux valeurs centrales est arrondie vers le signal le plus
-faible).
+faible). C'est la valeur du capteur « Signal médian » de la borne (un clic dessus ouvre
+son historique) ; avec une intégration antérieure à la 2.5.0, qui n'a pas ce capteur,
+la carte la calcule à partir des capteurs clients.
 
 Interrupteurs, mémorisés par navigateur : « Hors ligne », « Signal faible seulement »,
 et les deux filtres de connexion exclusifs « Filaire seulement » / « Sans fil
@@ -130,7 +132,7 @@ Les clients dont la borne est inconnue sont regroupés sous « Sans borne ». Un
 un client ou une borne ouvre sa fiche.
 
 Si la carte est signalée « Custom element not found: tenda-mw6-topology-card »,
-déclarez-la comme ressource Lovelace : URL `/tenda_mw6/tenda-mw6-topology-card.js?v=2`,
+déclarez-la comme ressource Lovelace : URL `/tenda_mw6/tenda-mw6-topology-card.js?v=3`,
 type **Module JavaScript**.
 
 ## Entités exposées

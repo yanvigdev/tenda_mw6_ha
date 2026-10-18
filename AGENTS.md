@@ -48,7 +48,10 @@ Fork of `kamiljaworski88/tenda_mw6_ha`. Fork goal: local authentication via a
     device registry, since `DeviceInfo.via_device` is deprecated). Derived from the client list
     only. Four sensors per node: `node_online`, `node_wifi`, `node_weakest_signal`,
     `node_median_signal` (`api.median_signal()`, rounding identical to the card's
-    `mw6tMedian`: keep both in sync). At setup, node devices already in the registry are recreated first, so a
+    `mw6tMedian`: keep both in sync). The topology card shows the `node_median_signal`
+    sensor value (`medianEntityId` / `medianSensor` from `mw6tCollectNodes`, click opens
+    its more-info) and computes `mw6tMedianSignal` only for orphans and for nodes
+    without that sensor (integration < 2.5.0). At setup, node devices already in the registry are recreated first, so a
     node without clients keeps its entities across restarts.
   - `translations/`: `en.json`, `fr.json`, `pl.json`; `strings.json` = English
     source. Entity names and sort-option labels are localized here

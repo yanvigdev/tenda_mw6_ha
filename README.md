@@ -65,8 +65,8 @@ Configure) hold two settings; saving them reloads the integration:
   A client Signal sensor only changes when the measurement differs from the displayed
   value by more than this many dBm. On a real mesh, 2 removed about 70 % of these
   writes; the displayed value may then be up to 2 dBm off. `0` disables it. Losing or
-  regaining a signal is always shown at once; node sensors keep the exact value. The
-  topology card's median reads the client sensors, so it follows the smoothed values.
+  regaining a signal is always shown at once; node sensors keep the exact value, and
+  so does the topology card's median, read from the node's "Median signal" sensor.
 
 ## The Lovelace card
 
@@ -114,7 +114,9 @@ dot at -60 dBm or better, orange below, red at or below the threshold, network i
 wired clients. Each node header also shows the **median signal** of its online Wi-Fi
 clients, with the dot of its level; it describes the whole node and ignores the toggles,
 like the online count (with an even count, the mean of the two middle values is rounded
-toward the weaker signal).
+toward the weaker signal). It is the value of the node's "Median signal" sensor (click
+it to open its history); with an integration older than 2.5.0, which has no such
+sensor, the card computes it from the client sensors.
 
 Toggles, remembered per browser: "Offline", "Weak signal only", and the two exclusive
 connection filters "Wired only" / "Wireless only" (checking one clears the other). An
@@ -123,7 +125,7 @@ filters hide it. Clients whose node is unknown are grouped under "No node". Clic
 client or a node to open its details.
 
 If the card is reported as "Custom element not found: tenda-mw6-topology-card", declare
-it as a Lovelace resource: URL `/tenda_mw6/tenda-mw6-topology-card.js?v=2`, type
+it as a Lovelace resource: URL `/tenda_mw6/tenda-mw6-topology-card.js?v=3`, type
 **JavaScript Module**.
 
 ## Exposed entities

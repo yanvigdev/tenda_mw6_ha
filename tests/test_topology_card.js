@@ -39,13 +39,13 @@ function clientStates(key, mac, name, ip, nodeSn, online, signal, entry) {
   };
 }
 
-/** Build one node sensor state. */
-function nodeState(key, sn, metric, entry) {
+/** Build one node sensor state; `value` defaults to "0". */
+function nodeState(key, sn, metric, entry, value) {
   const id = "sensor." + key + "_" + metric;
   return {
     [id]: {
       entity_id: id,
-      state: "0",
+      state: value === undefined ? "0" : value,
       attributes: {
         tenda_mw6_node: true,
         tenda_mw6_metric: metric,
@@ -130,6 +130,15 @@ assert.equal(topo.nodes[1].medianSignal, null);
 // The orphans' median ignores the filters too (Lost, -50, hidden by the wired filter).
 assert.deepEqual(topo.orphans, []);
 assert.equal(topo.orphansMedianSignal, -50);
+// The node's "Median signal" sensor wins over the client-side median (fallback only).
+const withMedian = Object.assign({}, states,
+  nodeState("salon", "SN0001", "node_median_signal", "entry", "-58"),
+  nodeState("cave", "SN0004", "node_median_signal", "entry", "unknown"));
+topo = model.mw6tBuildTopology(withMedian, entities, devices, areas, { entryId: "entry" });
+assert.equal(topo.nodes[0].medianSignal, -58);
+assert.equal(topo.nodes[0].medianEntityId, "sensor.salon_node_median_signal");
+assert.equal(topo.nodes[0].entityId, "sensor.salon_node_online"); // header target unchanged
+assert.equal(topo.nodes[1].medianSignal, null); // unknown sensor: no median, no fallback
 assert.equal(model.mw6tMedian([]), null);
 assert.equal(model.mw6tMedian([-70]), -70);
 assert.equal(model.mw6tMedian([-50, -80, -60]), -60);
@@ -197,6 +206,13 @@ html = makeCard({ entry_id: "entry" }, hass)._html();
 assert.match(html, /Médiane : -60 dBm/);
 assert.match(html, /class="median"><span class="dot good"><\/span>/);
 assert.equal((html.match(/Médiane :/g) || []).length, 2); // salon + orphans, not the cave
+
+// With the median sensor, the header shows its value and the line opens its history.
+html = makeCard({ entry_id: "entry" }, Object.assign({}, hass, { states: withMedian }))._html();
+assert.match(html, /<div class="median" data-entity="sensor\.salon_node_median_signal"><span class="dot good"><\/span>Médiane : -58 dBm/);
+assert.doesNotMatch(html, /Médiane : -60 dBm/);
+// The orphans keep the client-side median and a non-clickable line.
+assert.match(html, /<div class="median"><span class="dot good"><\/span>Médiane : -50 dBm/);
 
 // Connection toggles: rendered, exclusive state reflected, filter applied.
 assert.match(html, /data-connection="wired"/);

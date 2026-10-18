@@ -17,7 +17,7 @@
  *   weak_signal_threshold: -70   # optional, dBm
  */
 
-const MW6T_CARD_VERSION = "1.1.0";
+const MW6T_CARD_VERSION = "1.2.0";
 /** Default weak-signal threshold in dBm: a signal at or below it is "weak". */
 const MW6T_DEFAULT_WEAK = -70;
 /** A signal at or above this value (dBm) is "good". */
@@ -92,7 +92,10 @@ function mw6tNodeName(device, sn) {
  * @param {object} devices hass.devices.
  * @param {object} areas hass.areas.
  * @param {string|null} entryId Restrict to one config entry, or null for all.
- * @returns {Map<string, object>} Nodes keyed by serial, each with an empty `clients` list.
+ * @returns {Map<string, object>} Nodes keyed by serial, each with an empty `clients` list,
+ *   plus `medianEntityId` / `medianSensor`: the "Median signal" sensor of the node
+ *   (integration 2.5.0+) and its value in dBm (null when unknown or unavailable).
+ *   `medianEntityId` stays null when the integration does not provide that sensor.
  */
 function mw6tCollectNodes(states, entities, devices, areas, entryId) {
   const nodes = new Map();
@@ -111,10 +114,16 @@ function mw6tCollectNodes(states, entities, devices, areas, entryId) {
         area: area ? area.name : "",
         deviceId: registryEntry.device_id || null,
         entityId: null,
+        medianEntityId: null,
+        medianSensor: null,
         clients: [],
       });
     }
     const node = nodes.get(attrs.node_sn);
+    if (attrs.tenda_mw6_metric === "node_median_signal") {
+      node.medianEntityId = state.entity_id;
+      node.medianSensor = mw6tAvailable(state) ? mw6tNumber(state.state) : null;
+    }
     // The "Connected clients" sensor is the click target; any node sensor is a fallback.
     if (attrs.tenda_mw6_metric === "node_online" || !node.entityId) node.entityId = state.entity_id;
   });
@@ -265,7 +274,10 @@ function mw6tCompareNodes(left, right) {
  *
  * `online`, `total` and `medianSignal` (median dBm of the online Wi-Fi clients, null
  * without any) describe all the clients of a node, whatever the filters; `clients`
- * holds only the filtered, sorted ones. Clients whose node has no sensor (unknown or
+ * holds only the filtered, sorted ones. `medianSignal` is the value of the node's
+ * "Median signal" sensor when the integration provides it (the same value HA records
+ * in its history, computed from the raw signals); otherwise it falls back to the
+ * median of the client sensors, as before 2.5.0. Clients whose node has no sensor (unknown or
  * empty node_sn) go to `orphans`, with the same filters; `orphansMedianSignal` is
  * their median before filtering, like a node's.
  *
@@ -300,7 +312,9 @@ function mw6tBuildTopology(states, entities, devices, areas, options) {
     return Object.assign({}, node, {
       online: node.clients.filter(function (client) { return client.online === true; }).length,
       total: node.clients.length,
-      medianSignal: mw6tMedianSignal(node.clients),
+      // The node sensor is the reference; the client-side median only covers older
+      // integrations without it. An unknown sensor value stays null (no Wi-Fi client).
+      medianSignal: node.medianEntityId ? node.medianSensor : mw6tMedianSignal(node.clients),
       clients: node.clients
         .filter(function (client) { return mw6tKeepClient(client, opts); })
         .sort(mw6tCompareClients),
@@ -419,6 +433,7 @@ const MW6T_STYLES = [
   ".node-name { font-weight:600; color:var(--primary-text-color); }",
   ".area, .count, .median, .none, .empty { font-size:.75rem; color:var(--secondary-text-color); }",
   ".median { display:flex; align-items:center; gap:4px; }",
+  ".median[data-entity] { cursor:pointer; }",
   ".median .dot { width:8px; height:8px; }",
   ".client { display:grid; grid-template-columns:10px minmax(0,1fr) auto; column-gap:8px; align-items:center; padding:4px 0; font-size:.85rem; color:var(--primary-text-color); }",
   ".client[data-entity] { cursor:pointer; }",
@@ -525,11 +540,17 @@ class TendaMW6TopologyCard extends HTMLElement {
     return '<div class="toggles">' + independent.concat(connection).join("") + "</div>";
   }
 
-  /** Median line of a column header, with the dot of its level; empty when null. */
-  _medianHtml(median, threshold) {
+  /**
+   * Median line of a column header, with the dot of its level; empty when null.
+   * With `entityId` (the node's "Median signal" sensor), a click on the line opens
+   * that sensor's more-info dialog, i.e. its history, instead of the node's.
+   */
+  _medianHtml(median, threshold, entityId) {
     if (median === null || median === undefined) return "";
     const level = mw6tSignalLevel({ signal: median }, threshold);
-    return '<div class="median"><span class="dot ' + level + '"></span>' +
+    return '<div class="median"' +
+      (entityId ? ' data-entity="' + mw6tEscape(entityId) + '"' : "") + ">" +
+      '<span class="dot ' + level + '"></span>' +
       mw6tEscape(this._t("median") + " : " + median + " dBm") + "</div>";
   }
 
@@ -553,7 +574,7 @@ class TendaMW6TopologyCard extends HTMLElement {
       '<div class="node-name">' + mw6tEscape(column.name) + "</div>" +
       (column.area ? '<div class="area">' + mw6tEscape(column.area) + "</div>" : "") +
       '<div class="count">' + column.online + "/" + column.total + " " + mw6tEscape(this._t("online")) + "</div>" +
-      this._medianHtml(column.medianSignal, threshold) + "</div>";
+      this._medianHtml(column.medianSignal, threshold, column.medianEntityId) + "</div>";
     const rows = column.clients.length
       ? column.clients.map(function (client) { return this._clientHtml(client, threshold); }, this).join("")
       : '<div class="none">' + mw6tEscape(this._t("empty")) + "</div>";
@@ -608,7 +629,10 @@ class TendaMW6TopologyCard extends HTMLElement {
       }.bind(this));
     }, this);
     this.shadowRoot.querySelectorAll("[data-entity]").forEach(function (element) {
-      element.addEventListener("click", function () {
+      element.addEventListener("click", function (event) {
+        // The median line sits inside the clickable node header: only the innermost
+        // target must open its dialog.
+        event.stopPropagation();
         this.dispatchEvent(new CustomEvent("hass-more-info", {
           detail: { entityId: element.dataset.entity },
           bubbles: true,
